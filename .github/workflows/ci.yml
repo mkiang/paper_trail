@@ -1,0 +1,26 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: typst-community/setup-typst@v3
+        with:
+          typst-version: "0.15.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pyyaml pytest
+      - run: python3 scripts/validate_cv.py
+      - run: ./build.sh
+      - run: pytest tests/ -q
+  latest-typst-canary:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: typst-community/setup-typst@v3
+        with:
+          typst-version: latest
+      - run: typst compile cv.typ /tmp/out.pdf

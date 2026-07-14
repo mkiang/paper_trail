@@ -1,0 +1,31 @@
+# Mentees — structured rows. Auto-sorted reverse-chronologically at render
+# time; just append new mentees anywhere.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Renderer composes "_role_, name (institution)" — italics + parentheses
+# applied at render time, not in YAML.
+#
+# Schema (per item):
+#   - date:        string. Year or "YYYY - YYYY" range (use plain hyphen;
+#                  renderer rewrites to en-dash). Trailing " -" for ongoing.
+#                  Quote bare years like "2025" to prevent YAML's int
+#                  coercion.
+#   - role:        string. Advisory role. Rendered italic.
+#   - name:        string. Mentee's name. Rendered regular.
+#   - institution: string. Wrapped in "(...)" by the renderer.
+#   - audiences (optional): list. Empty/missing = always visible.
+#   - hide-from (optional): list. Per-entry blocklist; wins over audiences.
+#   - highlighted (optional, bool): hide the entry unless built with
+#                  `--input show_highlighted=true`. Use it to keep a
+#                  mentee row in YAML while it awaits review.
+
+- date: 2024 -
+  role: Doctoral advisor
+  name: Alex Example
+  institution: Example University
+- date: "2023"
+  role: Masters advisor
+  name: Bailey Sample
+  institution: Example University
+  highlighted: true

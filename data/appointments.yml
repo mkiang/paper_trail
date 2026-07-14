@@ -1,0 +1,59 @@
+# Professional Appointments — three subsections (Faculty / Academic
+# Affiliations / Postdoctoral and Fellowship), each containing
+# institution clusters with date-stamped role entries.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Structure:
+#   - subsection level (top of file): YAML-ordered, author-controlled.
+#   - cluster level (within a subsection): YAML-ordered, author-controlled.
+#   - entry level (within a cluster): auto-sorted reverse-chronologically.
+#
+# Visibility cascade: entry → cluster → subsection → empty. A subsection
+# with all clusters/entries filtered out is suppressed entirely (no dangling
+# header).
+#
+# Schema:
+#   - subsection: string. Renders as #subsection[...] header (small caps).
+#   - audiences (optional):  subsection-level allowlist; cascades down.
+#   - hide-from (optional):  subsection-level blocklist; cascades down.
+#   - clusters: list. Each item:
+#       - institution: string. Required. Bold cluster header.
+#       - city:        string. Optional. Appended as ", city".
+#       - audiences / hide-from (optional): cluster-level visibility,
+#                      overrides subsection defaults.
+#       - entries:     list. Each item:
+#           - date:    string. Required. "MM/YYYY", range, or open-ended.
+#                      Trailing " -" = ongoing; sorts to top of cluster.
+#           - role:    string. Required. Title held. Rendered italic.
+#           - program: string. Optional. Department / center / program
+#                      within the institution. Renders ", program" after
+#                      the italicized role.
+#           - audiences / hide-from (optional): entry-level visibility,
+#                      wins over cluster/subsection defaults.
+#           - highlighted (optional, bool): hide this entry unless built
+#                      with `--input show_highlighted=true`.
+
+- subsection: Faculty Appointments
+  clusters:
+  - institution: Example University School of Public Health
+    city: Exampleville, CA
+    entries:
+    - date: 07/2022 -
+      role: Assistant Professor
+      program: Department of Examples
+- subsection: Academic Affiliations
+  clusters:
+  - institution: Institute for Applied Examples
+    city: Boston, MA
+    entries:
+    - date: 01/2023 -
+      role: Faculty Affiliate
+- subsection: Postdoctoral and Fellowship Appointments
+  clusters:
+  - institution: Example University
+    city: Exampleville, CA
+    entries:
+    - date: 07/2018 - 06/2022
+      role: Postdoctoral Fellow
+      program: Center for Example Science

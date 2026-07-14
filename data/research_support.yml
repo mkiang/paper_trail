@@ -1,0 +1,71 @@
+# Research Support — flat list of grants. Subsection grouping is driven by
+# the per-grant `status` field, NOT by YAML structure. Moving a grant
+# through its lifecycle is a one-field change: pending → active → previous.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Schema (per grant):
+#   - status:    string. Required. One of:
+#                 active    — currently funded; renderer validates that the
+#                             end date is in the future and panics otherwise.
+#                 pending   — proposal submitted, under review. Hidden by
+#                             default; opt in via `--input show_pending=true`.
+#                 previous  — completed. No validation.
+#   - date:      string. Required. "MM/YYYY - MM/YYYY" range, or
+#                 "MM/YYYY -" for an open-ended active grant.
+#   - agency:    string. Required. Funder name; renders bold on row 1.
+#   - project:   string. Optional. Project / grant number (e.g.
+#                 "R00XX000000"). Quote bare-numeric project IDs like
+#                 "000000" so YAML doesn't coerce to int.
+#   - pi:        string. Optional. Name(s) of PI when you are NOT the sole
+#                 PI. Renders as ", {pi_label}: {pi}" inside the row-1
+#                 parenthetical.
+#   - pi_label:  string. Optional, default "PI". The label printed before
+#                 the `pi` value. Use "MPI" for multi-PI grants where you
+#                 are listed among the PIs, or "Co-PI" / "Contact PI" /
+#                 etc. as appropriate. Ignored when `pi` is absent.
+#   - title:     string. Required. Grant title; renders quoted on row 2
+#                 after the italicized "Title:" label.
+#   - role:      string. Required. Your role on the grant; renders on row 3
+#                 after the italicized "Role:" label.
+#   - amount:    string. Optional. Dollar amount + qualifier. Hidden when
+#                 `--input show_dollars=false` (internal CVs at some institutions).
+#                 Use SINGLE-quoted YAML so the `\$` escape is preserved
+#                 through mk(): '\$100,000 total costs per year'.
+#   - audiences (optional): per-entry allowlist.
+#   - hide-from (optional): per-entry blocklist.
+#   - highlighted (optional, bool): hide the grant unless built with
+#                 `--input show_highlighted=true`.
+#
+# Validation:
+#   * `status: active` grants must have an end date >= today, else the
+#     build panics. Run `./build.sh` regularly to catch grants whose
+#     status hasn't been demoted after they ended.
+#
+# Renderer behavior:
+#   * Subsection order is fixed: Pending (if shown) → Active → Previous.
+#   * Within each subsection, grants are sorted reverse-chronologically
+#     by start date (most recently started first).
+
+- status: pending
+  date: 07/2026 - 06/2031
+  agency: National Institute of Examples
+  project: R01EX098765
+  title: Long-term example dynamics in synthetic populations
+  role: Principal Investigator
+  amount: '\$425,000 total costs per year'
+- status: active
+  date: 09/2023 - 08/2099
+  agency: Example Health Foundation
+  project: "741852"
+  pi: Smith JA
+  pi_label: MPI
+  title: A worked example of grant rendering
+  role: Multiple Principal Investigator
+  amount: '\$150,000 total costs per year'
+- status: previous
+  date: 01/2019 - 12/2021
+  agency: Example University Office of Research
+  title: Seed funding for example methods
+  role: Co-Investigator
+  amount: '\$25,000 total costs'

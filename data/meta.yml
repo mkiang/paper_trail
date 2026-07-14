@@ -1,0 +1,181 @@
+# Front matter — header block, section order, footer template, and a few
+# document-wide knobs the renderer reads at module-import time.
+#
+# ----------------------------------------------------------------------------
+# YAML CONVENTIONS (apply to every data/*.yml in this project)
+# ----------------------------------------------------------------------------
+#   * Strings containing backslash escapes (e.g. '\$50,000', '\*footnote')
+#     MUST use SINGLE quotes. Double quotes would process the escape and
+#     corrupt the value (\$ → $, \* → *).
+#   * Everywhere else, prefer DOUBLE quotes when quoting is needed.
+#   * Plain (unquoted) strings are fine for unambiguous prose. Over-quoting
+#     is acceptable and helps protect future you from YAML's surprises.
+#   * Strings that look like numbers/booleans but should stay as strings
+#     (PMIDs, volumes, project numbers like "000000") must be quoted.
+#   * Typst markup inside YAML strings is parsed by the renderer's mk()
+#     helper, which calls eval(s, mode: "markup"). Use markdown-style:
+#       *bold*    _italic_    #link("url")[label]    --- → em-dash
+#     The author's own name is auto-bolded via `self_bold` below, so YAML
+#     should just say `Public JQ` plain (no `*Public JQ*` wrapping).
+# ----------------------------------------------------------------------------
+#
+# Schema:
+#   - name:        string. Renders 38pt at the top of page 1.
+#   - position:    string. First line below the name.
+#                  Use _..._ for italic, *...* for bold.
+#   - department:  string. Second line. Use _&_ for italic ampersand.
+#   - institution: string. Third line.
+#   - address:     list of strings. Each item is one line; joined to the
+#                  affiliation block with no extra inter-line spacing
+#                  (tight cluster).
+#   - contacts:    list. One row per contact. Each row:
+#       - glyph: string. Font Awesome codepoint. Either a YAML "\uXXXX"
+#                escape inside double quotes (readable in editors) or the
+#                literal private-use glyph pasted in. Look up codepoints at
+#                https://fontawesome.com. Common picks:
+#                  "\uf095"  phone           (solid)
+#                  "\uf0e0"  envelope/email  (solid)
+#                  "\uf0c1"  link/share      (solid)
+#                  "\uf8d2"  orcid           (brands)
+#                  "\uf09b"  github          (brands)
+#                  "\uf0e1"  linkedin        (brands)
+#                  "\ue61b"  x-twitter       (brands)
+#       - font:  string. "solid" | "regular" | "brands". Picks FA face.
+#       - text:  string. Display text (phone, email, URL, ORCID id, etc.).
+#       - link:  string. Optional. Explicit URL. If omitted, inferred
+#                from `text`:
+#                  contains "@"           → mailto:{text}
+#                  starts http(s)://      → text used as URL
+#                  matches NNNN-NNNN-NNNN-NNNX → https://orcid.org/{text}
+#                otherwise no link.
+#       - size:  length. Optional. Override glyph size. Default 5.5pt for
+#                solid/regular, 7pt for brands.
+#   - footer:
+#       template:           string. Page footer text. `{date}` is substituted
+#                           at render time with the current date. Em-dash via
+#                           `---`.
+#       date_format:        Typst datetime display format (see
+#                           https://typst.app/docs/reference/foundations/datetime/#format).
+#       show_on_first_page: bool. Optional, default false. When true the
+#                           footer renders on every page including page 1.
+#   - self_bold: string OR list of strings. Optional. The renderer's mk()
+#                helper substitutes every occurrence of each term with
+#                `*term*` (Typst strong markup) before evaluating, so the
+#                author's own name renders bold in publication / talk
+#                author lists without manual wrapping in every YAML row.
+#                Both forms supported:
+#                  self_bold: "Public JQ"
+#                  self_bold: ["Public JQ", "J. Q. Public", "Public, J. Q."]
+#                CAVEAT: literal substring match — choose terms unlikely
+#                to false-match (e.g. "Public JQ" is safe, "Lee J" is not).
+#   - oa_icons:  dict. Optional. Overrides for the open-access glyphs
+#                rendered next to publications when `--input show_oa=true`.
+#                Three keys recognized: code, data, paper. Each maps to a
+#                {glyph, font} pair (font is "solid" | "regular" | "brands").
+#                Per-key fallback: omitting `data` here still gets the
+#                default `data` icon; you only override what you change.
+#                Defaults (set in templates/modern/render.typ when key is absent):
+#                  code:  { glyph: "\uF121",  font: solid }   # </>
+#                  data:  { glyph: "\uF1C0",  font: solid }   # database
+#                  paper: { glyph: "\u{1F310}", font: solid }   # globe
+#   - oa_labels: dict. Optional. Overrides for the open-access sub-bullet
+#                labels rendered alongside each glyph when `--input
+#                show_oa=true`. Three keys recognized: code, data, paper.
+#                Per-key fallback (same as oa_icons). Defaults:
+#                  code:  "Code available"
+#                  data:  "Data available"
+#                  paper: "Paper open access"
+#   - sections:  list of strings. Controls both ORDER and PRESENCE of body
+#                sections. Renderers are dispatched in the order listed,
+#                and any section OMITTED from this list is not rendered
+#                (useful for hiding a whole section from one CV variant
+#                without deleting its YAML). The FIRST section in the list
+#                gets the 30pt-before override (matches the standard
+#                first-section-after-header convention). Header (name +
+#                contacts) is always first and is NOT in this list.
+#                Allowed keys (match the dispatch table in cv.typ):
+#                  education, appointments, publications, presentations,
+#                  research_support, service, teaching, honors, mentees
+#   - build_variants: list. Defines every PDF that `./build.sh` produces.
+#                Each variant has:
+#                  - filename: string. Output PDF basename (no extension).
+#                              Written to output/{filename}.pdf.
+#                  - inputs:   dict. Optional. Each key/value pair becomes
+#                              a `--input KEY=VALUE` flag passed to Typst.
+#                              Recognized keys (see lib/flags.typ):
+#                                audience, review, show_dollars,
+#                                show_pending, show_oa, show_citations,
+#                                show_contributions, show_notes,
+#                                show_media, show_media_urls,
+#                                show_hidden_media, show_highlighted,
+#                                show_future
+#                              show_dollars + show_media_urls default
+#                              to true; everything else defaults false.
+#                              show_future=true reveals future-dated
+#                              entries (else hidden until their start) and
+#                              shows their literal dates. A `today:
+#                              YYYY-MM-DD` input overrides the render date
+#                              (tests / reproducible builds); default is
+#                              the compile-machine clock.
+#                Add or remove variants to control what `./build.sh`
+#                produces — no shell-script edits required.
+
+name: Jane Q Public
+position: Assistant Professor
+department: Department of Examples _&_ Applied Methods
+institution: Example University School of Public Health
+address:
+- '#link("https://maps.example.org/campus")[123 Example Way, Suite 456]'
+- '#link("https://maps.example.org/campus")[Exampleville, CA 90210]'
+contacts:
+- glyph: 
+  font: solid
+  text: 555-867-5309
+- glyph: 
+  font: solid
+  text: jane@example.org
+- glyph: 
+  font: solid
+  text: https://example.org/jane
+- glyph: 
+  font: brands
+  text: 0000-0002-1825-0097
+
+footer:
+  template: JQ Public (Curriculum Vitae --- {date})
+  date_format: "[month repr:long] [year]"
+  show_on_first_page: false
+self_bold: Public JQ
+
+# Section order. Controls both ORDER and PRESENCE:
+#   - Sections are rendered in the order listed here.
+#   - The first section in the list gets the 30pt-before override
+#     (matches the standard first-section-after-header convention).
+#   - Sections OMITTED from this list are not rendered. Use this to
+#     hide whole sections from a CV variant without deleting their
+#     YAML data. (Per-entry visibility still works via audiences /
+#     hide-from on individual items.)
+#   - Available keys (must match the dispatch table in cv.typ):
+#     education, appointments, publications, presentations,
+#     research_support, service, teaching, honors, mentees
+# Header (name + contact info) is always rendered first and isn't in
+# this list.
+sections:
+- education
+- appointments
+- publications
+- presentations
+- research_support
+- service
+- teaching
+- honors
+- mentees
+build_variants:
+- filename: example-cv
+  inputs:
+    template: modern
+    show_pending: true
+- filename: example-public
+  inputs:
+    template: modern
+    audience: public-health

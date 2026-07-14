@@ -1,0 +1,83 @@
+# Professional Service — flat entries grouped by subsection, plus an
+# optional "Ad hoc reviewer" block per subsection that takes a list of
+# journals and renders them alphabetically.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Schema:
+#   - subsection: string. Renders as #subsection[...] header.
+#   - entries: list. Each item:
+#       - date:     string. Required. "MM/YYYY", "MM/YYYY - MM/YYYY",
+#                   "YYYY -" for ongoing. Renderer sorts entries by
+#                   end-date desc. Date column does NOT pass through mk(),
+#                   so footnote markers like "01/2026*" can be raw.
+#       - role:     string. Required. Rendered italic via mk().
+#       - venue:    string. Optional. Journal name (editorial) or agency
+#                   (funding). Rendered ", venue" after the italic role.
+#       - extras:   list of strings. Optional. Continuation lines that
+#                   render below the main row (same indentation, no date)
+#                   as `\` line breaks INSIDE the entry body. Use this for
+#                   study sections, asterisk explanations, anything that
+#                   logically belongs to the same row.
+#       - notes:    list. Optional. Sub-bullets rendered BELOW the entry
+#                   (different from `extras`, which stay inline). Each
+#                   item is either a plain string OR a dict:
+#                     { text: "...", highlighted: true }
+#                   `highlighted: true` hides just that sub-bullet unless
+#                   built with `--input show_highlighted=true`.
+#       - audiences (optional): per-entry allowlist.
+#       - hide-from (optional): per-entry blocklist.
+#       - highlighted (optional, bool): hide the entry unless built with
+#                   `--input show_highlighted=true`. Useful for items
+#                   pending review (e.g. university-internal service not
+#                   yet published on the CV).
+#   - ad_hoc_reviewer (optional, per subsection):
+#       - label:    string. What appears in the date column.
+#       - journals: list of strings. Order doesn't matter — the renderer
+#                   sorts case-insensitively at compile time.
+#
+# Difference between `extras` and `notes`:
+#   * extras → render as continuation lines INSIDE the entry body (linebreak
+#     within the same paragraph). Tighter visual grouping. Use for clarifying
+#     sub-text on the same entry (study section name, asterisk footnote).
+#   * notes  → render as separate sub-bullets BELOW the entry (indented,
+#     bulleted). Looser grouping. Use for press notes, follow-up activities,
+#     "selected to present to Congress" callouts.
+#
+# Asterisk footnote convention:
+#   * Date column doesn't pass through mk(), so `*` is fine raw:
+#       date: "01/2026*"
+#   * role + venue + extras + notes DO pass through mk() (Typst markup
+#     parsing), so a literal `*` needs to be `\*` to avoid being
+#     interpreted as the start of a *strong* span:
+#       role: 'Mail Reviewer\*'
+#       extras: ['\*Rescheduled to January 2026...']
+#   * Single-quoted YAML strings keep the backslash literal — preferred.
+#     Double-quoted alternative: "\\*...".
+#   * Same pattern works for any marker (`*`, `†`, `‡`) without renderer
+#     changes — the renderer is unaware these are footnote markers.
+
+- subsection: Editorial Service
+  entries:
+  - date: 01/2024 -
+    role: Associate Editor
+    venue: Journal of Synthetic Examples
+  ad_hoc_reviewer:
+    label: Ad hoc reviewer
+    journals:
+    - Journal of Synthetic Examples
+    - Annals of Examples
+    - Examples in Practice
+- subsection: Service to Professional Organizations
+  entries:
+  - date: 2025*
+    role: 'Abstract Reviewer\*'
+    venue: Example Research Society
+    extras:
+    - '\*Reviewed 12 abstracts for the annual meeting.'
+  - date: 06/2022 - 06/2024
+    role: Membership Committee
+    venue: Example Epidemiology Congress
+    notes:
+    - text: Chaired the student-award subcommittee in 2023.
+      highlighted: true

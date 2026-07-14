@@ -1,0 +1,9 @@
+[project]
+name = "paper-trail"
+version = "0.1.0"
+description = "A YAML-driven Typst academic CV engine."
+requires-python = ">=3.9"
+dependencies = ["pyyaml"]
+
+[tool.setuptools]
+py-modules = []

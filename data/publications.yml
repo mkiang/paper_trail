@@ -1,0 +1,186 @@
+# Publications — grouped by subsection. Reverse-numbered per subsection
+# (newest = highest, oldest = 1). Authors auto-bold "Public JQ" via
+# meta.self_bold and auto-apply co-first / co-senior / group-authorship
+# superscripts.
+#
+# YAML conventions: see header of data/meta.yml. Note especially:
+#   * volume / issue / pmid / pmcid values are strings, not numbers —
+#     quote them so YAML doesn't strip leading zeros or coerce them.
+#   * year / month / day ARE integers — leave them unquoted.
+#
+# Structure (top level): list of subsections. Each subsection holds an
+# `entries:` list. Subsections are author-ordered (YAML order) and entries
+# inside are auto-sorted reverse-chronologically by year → month → day.
+#
+# Citation render shape:
+#   <authors>. <title>. <journal>. <year [mon [day]][;vol(iss):pp]>.
+#   [doi: <doi>. ][Epub <epub_date>. ][PubMed PMID: <pmid>; ]
+#   [PubMed Central PMCID: <pmcid>.]
+#   [ †First authors contributed equally.] [ ‡Senior authors contributed equally.]
+#   [ ◊Group authorship.]
+#   [ <OA glyphs>]
+#
+# Schema (per entry):
+#   - authors: list. Each item is either:
+#       string                                       — plain author name
+#       { name: string, co_first: true }             — flagged co-first
+#       { name: string, co_senior: true }            — flagged co-senior
+#       { name: string, group_authorship: true }     — corporate / consortium /
+#                                                      working-group author
+#                                                      (e.g. the Example Consortium, X Working
+#                                                      Group, Y Collaborative)
+#     The renderer:
+#       * auto-bolds "Public JQ" (or whatever meta.self_bold contains)
+#       * appends † superscript to co-first authors
+#       * appends ‡ superscript to co-senior authors
+#       * appends ◊ superscript to group_authorship authors
+#       * adds "†First authors contributed equally." at the end of the
+#         citation if any co_first appear; same for "‡Senior authors…"
+#         and "◊Group authorship." (for `group_authorship`).
+#   - title:   string. Required. Sentence case. Quote when the title
+#              starts with a character YAML treats specially (colon, etc.)
+#              or contains a colon followed by space (e.g. "Title: subtitle"
+#              must be quoted to avoid YAML treating ":" as a key separator).
+#   - journal: string. Required. Rendered italic via mk().
+#   - year:    int.    Required. Used for sort + display.
+#   - month:   int 1-12. Optional. Renders "Jan"…"Dec" after year.
+#   - day:     int.    Optional. Renders after month.
+#   - volume:  string. Optional. Renders ";V" after the date.
+#   - issue:   string. Optional. Renders "(I)" after volume (requires volume).
+#   - pages:   string. Optional. Renders ":pp" after volume/issue, or
+#              "; pp" after the date when volume is absent (e.g. for
+#              electronic-only-ID papers like "kwag069").
+#   - doi:     string. Optional. Renders as "doi: NN.NNNN/…" linked to
+#              https://doi.org/{doi}; same body color via styles.typ.
+#   - epub_date: string. Optional. Free-form "YYYY Mon DD" form (e.g.
+#              "2025 Sep 18") rendered as "Epub <epub_date>." after the
+#              DOI. Use for online-ahead-of-print dates that differ from
+#              the issue date.
+#   - pmid:    string. Optional. Renders "PubMed PMID: <pmid>". Quote to
+#              keep YAML from coercing to int.
+#   - pmcid:   string. Optional. Renders "PubMed Central PMCID: <pmcid>".
+#   - open_access: dict. Optional. Any subset of {code, data, paper};
+#              each value is either a URL string (glyph renders as a
+#              clickable link) or `true` (glyph renders WITHOUT a link —
+#              useful placeholder until the URL is added). Hidden by
+#              default; opt in via `--input show_oa=true`. The FA glyphs
+#              are configurable via meta.yml `oa_icons`.
+#   - notes:   list of typed sub-bullets. Each item is a dict with a
+#              `type:` field plus type-specific keys:
+#       { type: commentary, citation: "..." }          — "Invited commentary: ..."
+#       { type: letter,     citation: "..." }          — "Letter: ..."
+#       { type: response,   citation: "..." }          — "Response: ..."
+#       { type: media,      outlets: [...] }           — "Selected media coverage: ..."
+#                                                        (each outlet is one of:
+#                                                          string                    — plain name
+#                                                          { name, url? }            — optional hyperlink
+#                                                          { name, url?, highlighted: true }
+#                                                                                    — flagged outlet)
+#       { type: editorial,  text: "..." }              — raw text (e.g. Editor's Choice)
+#       { type: contributions, text: "..." }           — "Contributions: ...";
+#                                                        hidden unless
+#                                                        `--input show_contributions=true`
+#       { type: note,       text: "..." }              — generic raw-text note
+#     Any note dict can ALSO have `highlighted: true` to hide just that
+#     sub-bullet (e.g. for an unverified commentary citation).
+#   - audiences (optional): per-entry allowlist; wins over subsection.
+#   - hide-from (optional): per-entry blocklist; wins over subsection.
+#   - highlighted: bool. Optional. Three granularity levels — all three
+#                  gated by `--input show_highlighted=true`:
+#       1. On the entry itself → hide the whole publication (default false).
+#       2. On a note in `notes:` → hide just that sub-bullet.
+#       3. On an outlet inside a media-note `outlets:` list → drop just
+#          that outlet (the rest of the list still renders). If ALL
+#          outlets in a media note get filtered, the whole "Selected
+#          media coverage" sub-bullet disappears.
+#     Use the most SPECIFIC level — e.g. if only one outlet in a media
+#     note is unverified, flag just that outlet, not the whole entry.
+
+- subsection: Peer-Reviewed Original Research
+  entries:
+  - title: Measuring example burdens in a synthetic population
+    authors:
+    - Smith JA
+    - name: Public JQ
+      co_first: true
+    - name: Doe AB
+      co_first: true
+    - Roe CD
+    journal: Journal of Synthetic Examples
+    year: 2025
+    month: 11
+    day: 4
+    volume: "12"
+    issue: "3"
+    pages: 210-9
+    doi: 10.9999/jse.2025.0001
+    pmid: "90000001"
+    pmcid: PMC90000001
+    open_access:
+      paper: https://example.org/papers/example-burdens.pdf
+      code: true
+    notes:
+    - type: media
+      outlets:
+      - name: Example Times
+        url: https://news.example.org/example-burdens
+      - name: Example Times
+        url: https://news.example.org/example-burdens-followup
+      - Wire Service
+      - name: Hidden Outlet
+        url: https://hidden.example.org/story
+        highlighted: true
+    - type: contributions
+      text: JQP designed the study, led the analysis, and wrote the first draft.
+  - title: "Synthetic cohorts: a worked example"
+    authors:
+    - Public JQ
+    - name: Example Methods Consortium
+      group_authorship: true
+    journal: Annals of Examples
+    year: 2024
+    month: 6
+    volume: "8"
+    issue: "1"
+    pages: e001234
+    doi: 10.9999/aex.2024.1234
+    pmid: "90000002"
+    notes:
+    - type: commentary
+      citation: Doe AB. Are synthetic cohorts real enough? Ann Examples. 2024;8(1):e001240.
+  - title: An entry hidden from the public variant
+    authors:
+    - Public JQ
+    - name: Poe EF
+      co_senior: true
+    - name: Noe GH
+      co_senior: true
+    journal: Journal of Hidden Examples
+    year: 2023
+    month: 4
+    doi: 10.9999/jhe.2023.0042
+    hide-from:
+    - public-health
+- subsection: Other Peer-reviewed Publications
+  entries:
+  - title: Charting example trends over time
+    authors:
+    - Public JQ
+    journal: Examples in Practice
+    year: 2022
+    month: 2
+    volume: "3"
+    issue: "4"
+    pages: 44-6
+    doi: 10.9999/eip.2022.0404
+    pmid: "90000003"
+- subsection: Other Scholarly Work (Not Peer-reviewed)
+  entries:
+  - title: The example methods handbook, version 2
+    authors:
+    - Public JQ
+    - Smith JA
+    journal: ExampleArchive [Preprint]
+    year: 2021
+    month: 8
+    doi: 10.9999/exar.2021.5555

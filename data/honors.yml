@@ -1,0 +1,39 @@
+# Honors & Awards — structured rows. Auto-sorted reverse-chronologically
+# at render time, so just append new awards anywhere — the renderer
+# handles ordering.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Italics/formatting are applied by the renderer, NOT by inline markup in
+# YAML. This lets us restyle every honor at once by editing templates/modern/render.typ
+# rather than every data file.
+#
+# Schema (per item):
+#   - date:        string. Year or "YYYY - YYYY" range. Use a plain hyphen
+#                  for ranges; the renderer rewrites " - " to " – " (en-dash)
+#                  so you don't have to type the special character.
+#                  Renders 9pt in the date column. (Quote bare years like
+#                  "2026" so YAML doesn't coerce them to integers.)
+#   - award:       string. The award/honor name. Rendered italic.
+#   - institution: string. Awarding body. Rendered regular weight.
+#   - audiences (optional): list. Allowlist — show only when current audience
+#                  matches one of these tags. Empty/missing = visible to all.
+#   - hide-from (optional): list. Blocklist — show everywhere EXCEPT these
+#                  audiences. The convenience case for "hide one item from
+#                  one CV variant" instead of listing every audience that
+#                  CAN see it. hide-from always wins over audiences.
+#   - highlighted (optional, bool): hide the entry unless built with
+#                  `--input show_highlighted=true`. Used for unverified /
+#                  pending awards that the author wants to keep in YAML
+#                  but not yet publish.
+
+- date: "2025"
+  award: Early Career Example Award
+  institution: Example Research Society
+- date: 2020 - 2021
+  award: Example Fellowship
+  institution: Example Health Foundation
+- date: "2019"
+  award: Pending verification award
+  institution: Example Society
+  highlighted: true
