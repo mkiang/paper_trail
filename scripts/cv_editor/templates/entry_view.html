@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tracker_banner_entry, pubmed_sync_banner_entry, qc_findings_banner_entry %}
+{% block title %}#{{ row.global_idx + 1 }} — {{ entry.get('title') or entry.get('role') or entry.get('award') or entry.get('name') or 'entry' }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('section_list', section=section_key) }}">&larr; back to {{ section_label }}</a></p>
+
+<h1>{{ entry.get('title') or entry.get('role') or entry.get('award') or entry.get('name') or '(entry)' }}</h1>
+<p class="muted">
+  {% if row.subsection %}{{ row.subsection }} · {% endif %}
+  {% if row.institution %}{{ row.institution }}{% if row.city %}, {{ row.city }}{% endif %} · {% endif %}
+  entry index {{ row.global_idx + 1 }}
+  {% if section_key == 'publications' and self_author_status and self_author_status != 'absent' %}· author position: {{ self_author_status }}{% endif %}
+</p>
+
+{% if needs_contribution %}
+<div class="banner banner-warn">
+  <strong>Missing contribution note.</strong> You are a middle author here. Add a <code>contributions</code> note via Edit so reviewers see your specific role.
+</div>
+{% endif %}
+
+{% if future_note %}
+<div class="banner banner-info">
+  <strong>Date-conditional entry.</strong> {{ future_note }}
+  Reveal it in a build with <code>--input show_future=true</code> (the <code>review</code> and <code>everything</code> variants do).
+</div>
+{% endif %}
+
+{% if capabilities.altmetric and section_key == 'publications' %}{{ tracker_banner_entry(tracker_count, row.global_idx, mtime_ns) }}{% endif %}
+
+{% if section_key == 'publications' %}{{ pubmed_sync_banner_entry(pubmed_flagged_fields) }}{% endif %}
+
+{% if section_key == 'publications' %}{{ qc_findings_banner_entry(qc_entry_findings) }}{% endif %}
+
+<div class="form-actions">
+  <a href="{{ url_for('entry_edit', section=section_key, idx=row.global_idx) }}" class="btn-primary">Edit</a>
+  {% if section_key != 'meta' %}
+  <form method="POST" action="{{ url_for('entry_duplicate', section=section_key, idx=row.global_idx) }}" style="display:inline">
+    <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+    <button type="submit" class="btn-secondary" title="Create a copy of this entry next to it">Duplicate</button>
+  </form>
+  {% endif %}
+  {% if is_preprint %}
+  <a href="{{ url_for('publication_promote', idx=row.global_idx) }}" class="btn-secondary">Promote to published</a>
+  {% endif %}
+  <form method="POST" action="{{ url_for('entry_delete', section=section_key, idx=row.global_idx) }}" style="display:inline" onsubmit="return confirm('Delete this entry? A backup is kept.')">
+    <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+    <button type="submit" class="btn-danger">Delete</button>
+  </form>
+</div>
+
+<dl class="entry">
+  {% for f in fields %}
+    {% set v = entry.get(f.name) %}
+    {% if v is not none and v != '' and v != [] and v != {} %}
+    <dt>{{ f.label or f.name }}</dt>
+    <dd>
+      {% if f.name == 'authors' and f.type == 'author_list' %}
+        <ol class="authors">
+          {% for a in author_forms %}
+            <li>
+              {{ a.name }}
+              {% if a.co_first %}<span class="badge">co-first</span>{% endif %}
+              {% if a.co_senior %}<span class="badge">co-senior</span>{% endif %}
+              {% if a.group_authorship %}<span class="badge">group</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% elif f.type == 'typed_notes' %}
+        {% if notes_form %}
+        <ul class="notes-view">
+          {% for n in notes_form %}
+          <li>
+            <span class="badge">{{ n.type }}</span>
+            {% if n.highlighted %}<span class="badge">hidden</span>{% endif %}
+            {% if n.type == 'media' %}
+              <p class="outlet-rendered">
+              {% set _groups = group_outlets(n.outlets) %}
+              {% for g in _groups %}
+                {%- if not loop.first -%}, {% endif -%}
+                {%- set _first = g.urls[0] -%}
+                {%- if _first.url -%}<a href="{{ _first.url | safe_url }}" rel="noopener">{{ g.name | replace('_', '') }}</a>{%- else -%}{{ g.name | replace('_', '') }}{%- endif -%}
+                {%- if g.urls|length > 1 -%}
+                  {{ ' ' }}(
+                  {%- for it in g.urls -%}
+                    {%- if loop.first -%}{# bare-name article 1; skip in parens #}
+                    {%- else -%}
+                      {%- if loop.index > 2 -%}, {% endif -%}
+                      {%- if it.url -%}<a href="{{ it.url | safe_url }}" rel="noopener">{{ it.local_idx }}</a>{%- else -%}{{ it.local_idx }}{%- endif -%}
+                    {%- endif -%}
+                  {%- endfor -%}
+                  )
+                {%- endif -%}
+              {% endfor %}
+              </p>
+              {% set _visible_outlet_count = n.outlets | rejectattr('highlighted') | list | length %}
+              <details class="outlet-raw-details">
+                <summary>Raw outlets ({{ _visible_outlet_count }}{% if _visible_outlet_count != n.outlets|length %} + {{ n.outlets|length - _visible_outlet_count }} hidden{% endif %})</summary>
+                <ul>
+                {% for o in n.outlets %}
+                  <li>
+                    {{ o.name }}{% if o.url %} —
+                    <a href="{{ o.url | safe_url }}" rel="noopener">{{ o.url }}</a>
+                    {% endif %}
+                    {% if o.highlighted %}<span class="badge">hidden</span>{% endif %}
+                  </li>
+                {% endfor %}
+                </ul>
+              </details>
+            {% else %}
+              {{ n.citation or n.text }}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}—{% endif %}
+      {% elif f.type == 'simple_notes' %}
+        {% if simple_notes_form %}
+        <ul class="notes-view">
+          {% for n in simple_notes_form %}
+          <li>{{ n.text }}{% if n.highlighted %} <span class="badge">hidden</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% else %}—{% endif %}
+      {% elif f.type == 'open_access_dict' %}
+        {% if open_access_form %}
+        <ul class="oa-view">
+          {% for key in ['paper', 'code', 'data'] %}
+            {% set ov = open_access_form[key] %}
+            {% if ov.enabled %}
+            <li><strong>{{ key }}</strong>: {% if ov.url %}<a href="{{ ov.url | safe_url }}" rel="noopener">{{ ov.url }}</a>{% else %}true{% endif %}</li>
+            {% endif %}
+          {% endfor %}
+        </ul>
+        {% else %}—{% endif %}
+      {% elif f.type == 'string_list' %}
+        <ul>
+          {% for s in v %}<li><code>{{ s }}</code></li>{% endfor %}
+        </ul>
+      {% elif f.type == 'audiences_set' %}
+        {% for s in v %}<span class="badge">{{ s }}</span>{% endfor %}
+      {% elif f.type == 'bool' %}
+        {% if v %}<span class="badge">{{ f.label or f.name }}</span>{% else %}—{% endif %}
+      {% elif f.type == 'grant_amount' %}
+        <code>{{ v }}</code> <span class="muted">(displays as: {{ v.lstrip('\\').lstrip('$') }})</span>
+      {% elif f.name in ('doi', 'preprint_doi', 'pmid', 'pmcid') %}
+        {% set _id_link = v|id_url(f.name) %}
+        {% if _id_link %}
+          <a class="id-link" href="{{ _id_link }}" target="_blank" rel="noopener noreferrer"><code>{{ v }}</code></a>
+        {% else %}
+          <code>{{ v }}</code>
+        {% endif %}
+        {% if capabilities.altmetric and f.name in ('doi', 'preprint_doi') and section_key == 'publications' %}
+          {% set _am_link = entry.get('title') | altmetric_url %}
+          {% if _am_link %}
+          &nbsp;<a class="altmetric-link" href="{{ _am_link }}" target="_blank" rel="noopener noreferrer"
+                   title="Open Altmetric Explorer for this article (searches by main title — text before any ': ' subtitle; sign-in may be required). Scan press mentions there, then add the relevant outlets to this entry's notes.">
+            View on Altmetric &nearr;
+          </a>
+          {% endif %}
+        {% endif %}
+      {% elif f.name == 'project' %}
+        <code>{{ v }}</code>
+      {% else %}
+        {{ v }}
+      {% endif %}
+    </dd>
+    {% endif %}
+  {% endfor %}
+</dl>
+{% endblock %}

@@ -1,0 +1,17 @@
+- subsection: Invited Talks
+  entries:
+    - title: On the nature of examples.
+      authors: Public JQ
+      venue: Example Conference
+      date: 06/2024
+      location: Somewhere, CA
+      notes:
+        - A note about the talk.
+    - title: A hidden talk
+      venue: Secret Venue
+      date: 01/2023
+      hide-from:
+        - public-health
+    - title: An older talk
+      venue: Old Symposium
+      date: 03/2022

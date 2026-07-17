@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+{% from "_macros.html" import triage_flag_row %}
+{% block title %}PubMed sync — CV Editor{% endblock %}
+{% block content %}
+<h1>PubMed sync</h1>
+<p class="muted">
+  Compares each publication's YAML fields against PubMed's authoritative record.
+  Auto-fills missing fields and flags disagreements for human triage. Sidecar
+  state lives at <code>data/publications_pubmed_sync.json</code>; PubMed records
+  cache in <code>.cache/pubmed/</code> (gitignored).
+</p>
+
+<div class="toolbar">
+  <div class="toolbar-actions">
+    <form method="POST" action="{{ url_for('pubmed_sync_run') }}" style="display:inline">
+      <button type="submit" class="btn-primary"
+              {% if status.running_dryrun or status.running_apply %}disabled{% endif %}
+              title="Fetch PubMed for stale/uncached entries and regenerate the report.">
+        {% if status.running_dryrun %}Running dry-run…{% else %}Run dry-run{% endif %}
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('pubmed_sync_run') }}" style="display:inline"
+          onsubmit="return confirm('Force re-fetch every PMID? Ignores TTLs; ~30–90 seconds for ~100 entries.')">
+      <input type="hidden" name="force" value="1">
+      <button type="submit" class="btn-secondary"
+              {% if status.running_dryrun or status.running_apply %}disabled{% endif %}
+              title="Ignore TTL and re-fetch every PMID.">
+        Force re-fetch all
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('pubmed_sync_run') }}" style="display:inline"
+          title="Only refresh entries currently marked epub/ahead-of-print (faster cadence).">
+      <input type="hidden" name="only_epub" value="1">
+      <button type="submit" class="btn-secondary"
+              {% if status.running_dryrun or status.running_apply %}disabled{% endif %}>
+        Refresh epub only
+      </button>
+    </form>
+    {% if status.report_url %}
+    <a class="btn-secondary" href="{{ status.report_url }}" target="_blank" rel="noopener">View raw report</a>
+    {% endif %}
+  </div>
+  <div class="toolbar-filters">
+    <span class="muted toolbar-label">
+      Sidecar: {{ status.sidecar_entries }} tracked {{ status.sidecar_entries|pluralize("PMID", "PMIDs") }}
+      · {{ status.accepted_overrides }} accepted {{ status.accepted_overrides|pluralize("override", "overrides") }}
+      {% if status.report_mtime %}· Last run: {{ status.report_mtime }}{% endif %}
+    </span>
+  </div>
+</div>
+
+{% if status.running_dryrun %}
+<div class="banner banner-info">
+  <strong>Dry-run in progress.</strong> Refresh in ~30–60s for results.
+</div>
+{% endif %}
+
+{% if status.running_apply %}
+<div class="banner banner-info">
+  <strong>Apply in progress.</strong> YAML writes + sidecar updates run in the
+  background. Refresh in ~10–30s.
+</div>
+{% endif %}
+
+{% if triage_error %}
+<div class="banner banner-warn">
+  <strong>Could not compute triage rows.</strong> {{ triage_error }}
+  Run a dry-run first.
+</div>
+{% endif %}
+
+{# Pending auto-fills (2026-07-11, gotcha #81). Missing fields PubMed can
+   fill directly — including a DOI-resolved PMID. Rendered OUTSIDE the
+   triage if/elif chain so a resolved PMID can be applied even when the
+   entry has no flagged disagreement (previously there was no Apply button
+   in that case). resolved-from-DOI rows are sorted first + badged. #}
+{% if autofill_rows %}
+{% set _resolved = autofill_rows | selectattr('resolved_from_doi') | list %}
+<section class="pmsync-autofills" style="margin: 1rem 0;">
+  <h2>Pending auto-fills ({{ autofill_rows | length }})</h2>
+  <p class="muted">
+    Fields missing from YAML that PubMed can fill directly — no per-field decision needed.
+    {% if _resolved %}
+    Includes <strong>{{ _resolved | length }}</strong> newly-resolved
+    {{ _resolved | length | pluralize("PMID", "PMIDs") }}
+    (badged <span class="pmsync-badge" style="background:#e8f0fe;color:#1a56c4;border-radius:3px;padding:0 .35em;font-size:.8em">DOI&rarr;PMID</span>) —
+    published with a DOI, now indexed in PubMed.
+    {% endif %}
+    <strong>Apply auto-fills</strong> writes these; flagged disagreements below are left untouched.
+  </p>
+  <table class="triage-flags">
+    <thead>
+      <tr><th>#</th><th>Title</th><th>Fields to fill</th></tr>
+    </thead>
+    <tbody>
+      {% for r in autofill_rows %}
+      <tr>
+        <td>
+          <a href="{{ url_for('entry_view', section='publications', idx=r.global_idx) }}">#{{ r.global_idx + 1 }}</a>
+          {% if r.resolved_from_doi %}
+          <span class="pmsync-badge" title="PMID discovered from this entry's DOI"
+                style="background:#e8f0fe;color:#1a56c4;border-radius:3px;padding:0 .35em;font-size:.8em">DOI&rarr;PMID</span>
+          {% endif %}
+        </td>
+        <td>{{ (r.title_preview or '(no title)')[:60] }}</td>
+        <td>
+          {% for f in r.fills %}<code>{{ f.field }}={{ f.value[:40] }}</code>{% if not loop.last %} · {% endif %}{% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="POST" action="{{ url_for('pubmed_sync_apply_autofills') }}" style="margin-top:0.5rem">
+    <button type="submit" class="btn-primary"
+            {% if status.running_dryrun or status.running_apply %}disabled{% endif %}
+            title="Write every pending auto-fill (pmid/pmcid/volume/...) to YAML now. Does not touch flagged disagreements.">
+      Apply auto-fills ({{ autofill_rows | length }})
+    </button>
+  </form>
+</section>
+{% endif %}
+
+{% if triage_rows %}
+<form method="POST" action="{{ url_for('pubmed_sync_apply') }}" id="triage-form">
+  <h2>Pending flags ({{ triage_rows | sum(attribute='flags', start=[]) | length }})</h2>
+  <p class="muted">
+    For each flagged field, pick how to reconcile YAML vs PubMed. <strong>Keep YAML</strong>
+    requires a reason and records an accepted override so the flag won't re-surface unless the YAML
+    value changes. <strong>Apply PubMed</strong> writes PubMed's value into the YAML on submit.
+    <strong>Edit manually</strong> opens the entry in the editor so you can fix the field directly
+    (no decision recorded).
+  </p>
+  {# V20-cleanup M5 (2026-05-18): bulk-toggle UX. Two buttons —
+     "Defer" and "Keep YAML" (non-destructive direction). Silent
+     overwrite on click is intentional for these (matches "Select all"
+     UX expectations).
+     Stage E / I10 (2026-05-25): added "All apply PubMed" as a THIRD
+     button using an INLINE TWO-STEP confirmation UX. The destructive
+     direction (writes PubMed values into YAML) was held back at M5
+     because a stray mis-click would flip every entry; the two-step
+     pattern (first click arms + shows "click again to confirm" + 5s
+     auto-reset; second click commits) lets the user act with one
+     click each but requires deliberation. Uses a DISTINCT
+     `data-bulk-apply` attribute (NOT `data-bulk-decision`) so the
+     existing M5 handler doesn't accidentally match + fire on the
+     first click — that would defeat the entire two-step UX. #}
+  <div class="triage-bulk-actions">
+    <span class="muted">Set every flag:</span>
+    <button type="button" class="btn-secondary" data-bulk-decision=""
+            title="Set all radios to 'defer' (default, no change written).">
+      All defer
+    </button>
+    <button type="button" class="btn-secondary" data-bulk-decision="keep_yaml"
+            title="Set all radios to 'keep YAML'. Reason input is still required per row before Apply.">
+      All keep YAML
+    </button>
+    <button type="button" class="btn-destructive" data-bulk-apply
+            title="DESTRUCTIVE: sets every flag to 'apply PubMed' (writes PubMed values into YAML on submit). Two-step confirm: first click arms the button for 5 seconds; click again within 5s to commit.">All apply PubMed</button>
+    <span class="triage-bulk-status muted" aria-live="polite"></span>
+  </div>
+
+  {% for r in triage_rows %}
+  <section class="triage-entry">
+    <h3>
+      <a href="{{ url_for('entry_view', section='publications', idx=r.global_idx) }}">
+        #{{ r.global_idx + 1 }} — {{ r.title_preview or '(no title)' }}
+      </a>
+    </h3>
+    <p class="muted">
+      PMID: <code>{{ r.pmid }}</code>
+      {% if r.publication_status %}· {{ r.publication_status }}{% endif %}
+    </p>
+
+    <table class="triage-flags">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>YAML value</th>
+          <th>PubMed value</th>
+          <th>Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# V20-cleanup M4 (2026-05-18): per-flag row moved to
+           _macros.html:triage_flag_row. The macro is a named seam
+           between render (here) and parse (pubmed_sync_apply route).
+           Class names on the radios (.triage-radio-defer / -keep /
+           -apply) are also the hooks for M5's bulk-toggle UX. #}
+        {% for f in r.flags %}
+          {{ triage_flag_row(r.pmid, f, r.global_idx, pending_form or {}) }}
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+
+  <div class="form-actions">
+    <button type="submit" class="btn-primary"
+            {% if status.running_apply %}disabled{% endif %}>
+      Apply non-deferred decisions
+    </button>
+  </div>
+</form>
+{% elif not triage_error and status.report_mtime %}
+<div class="banner banner-ok">
+  <strong>No pending flags.</strong> Every fetched PMID agrees with its YAML
+  record, or all disagreements have an accepted override. Sidecar has
+  {{ status.sidecar_entries }} tracked {{ status.sidecar_entries|pluralize("PMID", "PMIDs") }}.
+</div>
+{% elif not triage_error %}
+<div class="banner banner-info">
+  <strong>No dry-run yet.</strong> Click <em>Run dry-run</em> above to fetch
+  current PubMed data and surface any disagreements.
+</div>
+{% endif %}
+
+{# V23-B Phase 1.5 (2026-05-26): cross-silenced flags rendered OUTSIDE
+   the if/elif chain so they appear even when triage_rows is empty (all
+   pending flags silenced by QC). NO radio inputs; purely informational
+   with a jump-to-QC link. #}
+{% if cross_silenced_rows %}
+{% set _total_cs = cross_silenced_rows | sum(attribute='fields', start=[]) | length %}
+<details class="qc-cross-silenced-section" style="margin: 1rem 0;">
+  <summary style="cursor: pointer; color: #666;">
+    <strong>{{ _total_cs }}</strong> {{ _total_cs|pluralize("flag", "flags") }} silenced by QC triage
+    <a href="{{ url_for('qc_triage_view') }}" style="margin-left: 0.5rem; font-size: 0.85em;">view QC triage &rarr;</a>
+  </summary>
+  <table class="qc-triage-table" style="margin-top: 0.5rem;">
+    <thead>
+      <tr>
+        <th>PMID</th>
+        <th>Title</th>
+        <th>Field</th>
+        <th>Silenced by</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in cross_silenced_rows %}
+        {% for fr in r.fields %}
+        <tr class="qc-cross-silenced-row">
+          {% if loop.first %}
+          <td rowspan="{{ r.fields|length }}"><code>{{ r.pmid }}</code></td>
+          <td rowspan="{{ r.fields|length }}">{{ (r.title_preview or '')[:60] }}</td>
+          {% endif %}
+          <td><code>{{ fr.field }}</code></td>
+          <td class="muted" style="font-size: 0.9em;">
+            {% if fr.badge.get('reason') %}
+              "{{ fr.badge.reason }}"<br>
+            {% else %}
+              <em>no reason given</em><br>
+            {% endif %}
+            {% if fr.badge.get('decided_at') %}
+            <span style="font-size: 0.85em;">{{ fr.badge.decided_at[:10] }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
+{# V13-V19-D R3-H3 (2026-05-17): auto-poll /pubmed_sync/status while a
+   background job (dryrun or apply) is in flight, and reload when it
+   completes. Avoids "Refresh in ~30s" guesswork. #}
+<script>
+(function() {
+  var running = {{ 'true' if (status.running_dryrun or status.running_apply) else 'false' }};
+  if (!running) return;
+  var pollMs = 3000;
+  function poll() {
+    fetch("{{ url_for('pubmed_sync_status_json') }}", {cache: "no-store"})
+      .then(function(r) { return r.json(); })
+      .then(function(s) {
+        if (!s.running_dryrun && !s.running_apply) {
+          // Job finished. Reload so the new sidecar + triage rows surface.
+          window.location.reload();
+        } else {
+          setTimeout(poll, pollMs);
+        }
+      })
+      .catch(function() { setTimeout(poll, pollMs); });
+  }
+  setTimeout(poll, pollMs);
+})();
+</script>
+
+{# V13-V19-D R3-M3 (2026-05-18): guard the triage form against accidental
+   nav-away. Triaging 30+ flags is real work; one stray click on a nav
+   link without this would drop everything. The form id 'triage-form'
+   is rendered only when triage_rows is non-empty (see the {% if
+   triage_rows %} block above), so the script no-ops on empty pages. #}
+{% if triage_rows %}
+<script src="{{ url_for('static', filename='form_dirty_guard.js') }}"></script>
+<script src="{{ url_for('static', filename='bulk_radios.js') }}"></script>
+<script>FormDirtyGuard.attach("triage-form");</script>
+<script>
+// Tier B / B6 (2026-05-27): bulk-radio handlers extracted to
+// static/bulk_radios.js. See scripts/CLAUDE.md gotcha #51 (M5 bulk
+// decision contract) + gotcha #57 (Stage E two-step apply contract).
+(function () {
+  var applyBtn = document.querySelector("[data-bulk-apply]");
+  var statusEl = document.querySelector(".triage-bulk-status");
+  // All decision radios — gives M5 buttons the form-wide scope they
+  // had before; apply button uses a value-filtered subset.
+  function allDecisionRadios() {
+    return document.querySelectorAll(
+      "#triage-form input[type=radio][name^='decision-']"
+    );
+  }
+  function applyableRadios() {
+    return document.querySelectorAll(
+      "#triage-form input[type=radio][name^='decision-'][value='apply_pubmed']"
+    );
+  }
+
+  if (applyBtn) {
+    BulkRadios.wireBulkApplyTwoStep({
+      button: applyBtn,
+      getRadios: applyableRadios,
+      statusEl: statusEl,
+      armLabel: function (n /*, total, skipped */) {
+        return 'Click again to confirm — ' + n + ' flag' +
+          (n === 1 ? '' : 's') + ' will be set to apply PubMed';
+      },
+      cancelText: 'Apply-all cancelled (5-second timeout).',
+    });
+  }
+
+  document.querySelectorAll('[data-bulk-decision]').forEach(function (btn) {
+    var value = btn.dataset.bulkDecision || '';
+    BulkRadios.wireBulkDecision({
+      button: btn,
+      getRadios: allDecisionRadios,
+      value: value,
+      statusEl: statusEl,
+      disarmSiblings: applyBtn ? [applyBtn] : [],
+      onAfter: function (touched) {
+        if (value === 'keep_yaml') {
+          var firstReason = document.querySelector(
+            '#triage-form .triage-reason'
+          );
+          if (firstReason) firstReason.focus();
+          if (statusEl) statusEl.textContent =
+            'All set to keep YAML — each row still needs a reason before Apply.';
+        } else if (value === '') {
+          if (statusEl) statusEl.textContent = 'All set to defer.';
+        } else {
+          if (statusEl) statusEl.textContent =
+            'Set ' + touched + ' row(s) to ' + (value || 'defer') + '.';
+        }
+      },
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

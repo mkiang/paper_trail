@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Backups: {{ section_label }} — CV Editor{% endblock %}
+{% block content %}
+{% if section_key == 'meta' %}
+<p><a href="{{ url_for('meta_view') }}">&larr; back to {{ section_label }}</a></p>
+{% else %}
+<p><a href="{{ url_for('section_list', section=section_key) }}">&larr; back to {{ section_label }}</a></p>
+{% endif %}
+
+<h1>Backups: {{ section_label }} <span class="muted">({{ backups | length }} kept)</span></h1>
+<p class="hint">Each save writes a timestamped backup before touching the file. Restore replaces the current YAML with the backup contents (parse-validated first; the current file is itself backed up just before being replaced, so you can undo the restore).</p>
+<p class="muted">Current file size: {{ current_size }} bytes</p>
+
+{% if not backups %}
+<p>No backups yet for this file.</p>
+{% else %}
+<table class="entries">
+  <thead><tr><th>#</th><th>Timestamp</th><th>Size</th><th>Diff</th><th>Restore</th></tr></thead>
+  <tbody>
+    {% for b in backups %}
+    <tr>
+      <td class="num">{{ loop.index }}</td>
+      <td><code>{{ b.ts }}</code></td>
+      <td>{{ b.size }} bytes</td>
+      <td><a href="{{ url_for('backup_diff', section=section_key, name=b.name) }}">vs current</a></td>
+      <td>
+        <form method="POST" action="{{ url_for('entry_restore', section=section_key) }}" style="display:inline" onsubmit="return confirm('Restore this backup? Current file is backed up first so this is reversible.')">
+          <input type="hidden" name="backup_name" value="{{ b.name }}">
+          <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+          <button type="submit" class="btn-secondary">Restore</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

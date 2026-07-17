@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Search — CV Editor{% endblock %}
+{% block content %}
+<h1>Search across all sections</h1>
+
+<form method="GET" action="{{ url_for('search') }}">
+  <label for="search-q" class="visually-hidden">Search query</label>
+  <input type="search" id="search-q" name="q" value="{{ q }}" placeholder="Search title / authors / role / venue / institution / etc." autofocus>
+  <button type="submit" class="btn-primary">Search</button>
+</form>
+
+{% if q %}
+<p class="muted">{{ results | length }} {{ results|length|pluralize("match", "matches") }} for <code>{{ q }}</code></p>
+{% if results %}
+<ul class="search-results">
+  {% for r in results %}
+  <li>
+    <span class="badge">{{ r.section_label }}</span>
+    {% if r.ctx.subsection %}<span class="muted">· {{ r.ctx.subsection }}</span>{% endif %}
+    {% if r.ctx.institution %}<span class="muted">· {{ r.ctx.institution }}</span>{% endif %}
+    <br>
+    <a href="{{ r.view_url }}">{{ r.snippet }}</a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,15 @@
+# Two clusters in oldest-first YAML order. Education clusters ARE reordered
+# newest-first by their most-recent entry (render-education), so the golden lists
+# "Newer A&M University" (2018) BEFORE "Older State College" (2010). The literal
+# "&" also proves HTML-escaping of a literal cluster institution (-> &amp;).
+- institution: Older State College
+  entries:
+    - degree: BA
+      title: Sociology
+      department: Department of Things
+      date: 2010
+- institution: Newer A&M University
+  entries:
+    - degree: PhD
+      title: Examples
+      date: 2018

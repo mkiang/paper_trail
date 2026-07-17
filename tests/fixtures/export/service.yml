@@ -1,0 +1,17 @@
+- subsection: Professional Service
+  entries:
+    - role: Committee Member
+      venue: Example Society
+      date: 2023
+      extras:
+        - Reviewed 5 proposals.
+    - role: Hidden Service
+      venue: Secret Org
+      date: 2022
+      hide-from:
+        - public-health
+  ad_hoc_reviewer:
+    label: Ad Hoc Reviewer
+    journals:
+      - Zeta Journal
+      - Alpha Review

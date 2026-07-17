@@ -1,0 +1,12 @@
+- subsection: Academic Appointments
+  clusters:
+    - institution: Example University
+      city: Exampleville, EX
+      entries:
+        - role: Assistant Professor
+          program: Department of Examples
+          date: 2022 -
+        - role: Hidden Appointment
+          date: 2020
+          hide-from:
+            - public-health

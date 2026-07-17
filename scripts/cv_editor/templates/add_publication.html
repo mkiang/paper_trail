@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Add publication — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('section_list', section='publications') }}">&larr; back to list</a></p>
+<h1>Add publication</h1>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="paste">Paste citation</button>
+  <button class="tab-btn" data-tab="upload">Upload file</button>
+  <button class="tab-btn" data-tab="doi-pmid">From DOI / PMID</button>
+  <button class="tab-btn" data-tab="orcid">From ORCID</button>
+  <button class="tab-btn" data-tab="manual">Manual</button>
+</div>
+
+<section class="tab-pane active" id="tab-paste">
+  <form method="POST" action="{{ url_for('publication_import') }}">
+    <input type="hidden" name="source" value="paste">
+    <p class="hint">Paste any of: a BibTeX entry (<code>@article{...}</code>), an NLM/Vancouver-format citation (e.g. from your <a href="https://www.ncbi.nlm.nih.gov/myncbi/" target="_blank">NCBI My Bibliography page</a>), or any text containing an inline DOI. Multiple citations supported — separate with blank lines.</p>
+    <textarea name="text" rows="12" class="mono" placeholder="@article{smith2024foo,
+  author = {Smith, J and Doe, AB},
+  title = {Foo bar baz},
+  journal = {JAMA},
+  year = {2024},
+  doi = {10.1001/jama.2024.1}
+}
+
+OR
+
+Smith J, Doe AB, Roe CD. Title of paper. JAMA. 2024 Jan 1;100(1):1-10. PubMed PMID: 12345678."></textarea>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Parse + enrich</button>
+    </div>
+  </form>
+</section>
+
+<section class="tab-pane" id="tab-upload">
+  <form method="POST" action="{{ url_for('publication_import') }}" enctype="multipart/form-data">
+    <input type="hidden" name="source" value="file">
+    <p class="hint">Upload a <code>.bib</code>, <code>.nbib</code>, or <code>.txt</code> file. Same parser as paste; auto-detects BibTeX vs NLM vs free-form text.</p>
+    <input type="file" name="file" accept=".bib,.nbib,.txt,text/plain">
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Upload + parse</button>
+    </div>
+  </form>
+</section>
+
+<section class="tab-pane" id="tab-doi-pmid">
+  <form method="POST" action="{{ url_for('publication_import') }}">
+    <input type="hidden" name="source" value="doi_pmid">
+    <p class="hint">Paste a single DOI (<code>10.NNNN/...</code>), a PMID (8-digit number), or any string containing one. The app fetches canonical metadata from PubMed and Crossref and pre-fills the entry form.</p>
+    <input type="text" name="ident" placeholder="10.1001/jama.2024.1   or   12345678">
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Fetch + pre-fill</button>
+    </div>
+  </form>
+</section>
+
+<section class="tab-pane" id="tab-orcid">
+  <form method="POST" action="{{ url_for('publication_import') }}">
+    <input type="hidden" name="source" value="orcid">
+    <p class="hint">Enter an ORCID iD (<code>0000-0000-0000-0000</code>; the last character may be <code>X</code>). The app fetches the public works list, extracts each DOI/PMID, and shows what's <strong>new</strong> vs. <strong>already in your CV</strong>. Discovery only — nothing is written until you import a row, which runs the same PubMed/Crossref enrich + review step as the DOI/PMID tab.</p>
+    <input type="text" name="orcid_id" placeholder="0000-0002-1825-0097" pattern="\d{4}-\d{4}-\d{4}-\d{3}[\dXx]" title="ORCID iD: four groups of digits, last char may be X">
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Discover works</button>
+    </div>
+  </form>
+</section>
+
+<section class="tab-pane" id="tab-manual">
+  <p class="hint">Skip the import step and fill out the form directly.</p>
+  <a href="{{ url_for('entry_new', section='publications') }}" class="btn-primary">Open blank form</a>
+</section>
+
+<style>
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+.tab-btn { background: transparent; border: 0; padding: 0.5rem 1rem; cursor: pointer; font: inherit; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab-btn.active { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.tab-pane textarea { width: 100%; padding: 0.5rem; border: 1px solid var(--line); border-radius: 3px; }
+.tab-pane input[type="text"] { width: 100%; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; }
+</style>
+<script>
+document.querySelectorAll(".tab-btn").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".tab-btn").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".tab-pane").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  document.getElementById("tab-" + b.dataset.tab).classList.add("active");
+}));
+</script>
+{% endblock %}

@@ -1,0 +1,7 @@
+- date: '2024'
+  award: Best *Example* Award
+  institution: Example Society
+- date: 2020 - 2021
+  award: Hidden honor
+  institution: Secret Org
+  highlighted: true

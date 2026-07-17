@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ section_label }} — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('index') }}">&larr; back to sections</a></p>
+<h1>{{ section_label }}</h1>
+<p class="muted">Header / footer / self-bold / section order. Build variants are edited in V4 (Style editor).</p>
+
+<div class="form-actions">
+  <a href="{{ url_for('meta_edit') }}" class="btn-primary">Edit</a>
+  <a href="{{ url_for('entry_backups', section='meta') }}" class="btn-secondary">Backups</a>
+</div>
+
+<dl class="entry">
+  {% for f in fields %}
+    {% set v = entry.get(f.name) %}
+    {% if v is not none and v != '' and v != [] and v != {} %}
+    <dt>{{ f.label or f.name }}</dt>
+    <dd>
+      {% if f.type == 'string_list' %}
+      <ol>{% for s in v %}<li><code>{{ s }}</code></li>{% endfor %}</ol>
+      {% elif f.type == 'textarea' %}
+      <pre class="mono">{{ v }}</pre>
+      {% else %}
+      <code>{{ v }}</code>
+      {% endif %}
+    </dd>
+    {% endif %}
+  {% endfor %}
+</dl>
+
+<p class="hint">The <code>build_variants:</code> block is preserved on save but not editable here yet — coming in V4.</p>
+{% endblock %}

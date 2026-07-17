@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Data validation</h1>
+
+{% if not rows %}
+<div class="banner banner-ok">All clear — 0 errors, 0 warnings across every section.</div>
+<p class="muted">This check is read-only and offline. It runs on the index, in
+the <code>build.sh</code> preflight, and via <code>python scripts/check_data.py</code>.</p>
+{% else %}
+<p class="muted">
+  <strong>{{ error_count }}</strong> {{ error_count|pluralize("error", "errors") }},
+  <strong>{{ warning_count }}</strong> {{ warning_count|pluralize("warning", "warnings") }}.
+  Errors will break the build; warnings render but are probably wrong. Read-only and
+  offline — re-run any time.
+</p>
+<table class="entry-table data-validate-table">
+  <thead>
+    <tr>
+      <th scope="col">Severity</th>
+      <th scope="col">Location</th>
+      <th scope="col">Field</th>
+      <th scope="col">Entry</th>
+      <th scope="col">Issue</th>
+      <th scope="col"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    {% set i = r.issue %}
+    <tr>
+      <td><span class="sev-badge sev-{{ i.severity }}">{{ i.severity|upper }}</span></td>
+      <td><code>{{ i.file }}{% if i.line %}:{{ i.line }}{% endif %}</code></td>
+      <td>{% if i.field %}<code>{{ i.field }}</code>{% endif %}</td>
+      <td>{{ i.entry_label }}</td>
+      <td>{{ i.message }}</td>
+      <td>{% if r.edit_url %}<a href="{{ r.edit_url }}">Edit &rarr;</a>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

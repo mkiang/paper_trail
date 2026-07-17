@@ -1,9 +1,84 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "paper-trail"
-version = "0.1.0"
-description = "A YAML-driven Typst academic CV engine."
-requires-python = ">=3.9"
-dependencies = ["pyyaml"]
+version = "1.0.0"
+description = "A multi-variant, YAML-driven academic CV system: a Typst renderer (the `modern` template) plus a local Flask editor."
+requires-python = ">=3.11"
+readme = "README.md"
+license = { file = "LICENSE" }
+
+# Core runtime dependencies. Deliberately small: the editor + build path use
+# only these. All HTTP is stdlib urllib (no `requests`).
+dependencies = [
+    "Flask>=3.0",
+    "ruamel.yaml>=0.18",
+    "PyYAML>=6.0",
+    "bibtexparser>=2.0.0b9",   # v2 API (beta line); used by cv_editor.bibtex_parse
+    "filelock>=3.12",
+    "lxml>=5.0",               # pdf_text_extract (imported at collection by a couple of tests)
+]
+
+[project.optional-dependencies]
+# Test + lint tooling.
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+# Console entry point for the local editor (also `python -m cv_editor`).
+cv-editor = "cv_editor.cli:main"
 
 [tool.setuptools]
-py-modules = []
+package-dir = { "" = "scripts" }
+# Standalone top-level modules imported by bare name (tests import them without
+# a package prefix). build_variant backs the example-corpus build + render smoke;
+# build_lock_check is its helper; init_cv + pdf_text_extract are imported by tests.
+py-modules = [
+    "build_lock_check",
+    "build_variant",
+    "init_cv",
+    "pdf_text_extract",
+]
+
+[tool.setuptools.packages.find]
+where = ["scripts"]
+include = ["cv_editor*"]
+
+[tool.setuptools.package-data]
+# Ship the editor's Jinja templates, static assets, and the bundled example
+# corpus (the reset-to-example / blank-CV seed reachable inside an installed
+# wheel; see cv_editor.paths.example_dir).
+cv_editor = ["templates/*.html", "static/*", "example_data/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["output", ".cache", ".cv_editor_backups"]
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]
+testpaths = ["tests"]
+markers = [
+    "mutates_publications_yml: test intentionally mutates data/publications.yml (opts out of the corruption canary)",
+    "mutates_meta_yml: test intentionally mutates data/meta.yml (opts out of the corruption canary)",
+    "mutates_honors_yml: test intentionally mutates data/honors.yml (opts out of the corruption canary)",
+    "mutates_presentations_yml: test intentionally mutates data/presentations.yml (opts out of the corruption canary)",
+    "mutates_research_support_yml: test intentionally mutates data/research_support.yml (opts out of the corruption canary)",
+    "mutates_service_yml: test intentionally mutates data/service.yml (opts out of the corruption canary)",
+    "mutates_teaching_yml: test intentionally mutates data/teaching.yml (opts out of the corruption canary)",
+    "mutates_mentees_yml: test intentionally mutates data/mentees.yml (opts out of the corruption canary)",
+    "mutates_education_yml: test intentionally mutates data/education.yml (opts out of the corruption canary)",
+    "mutates_appointments_yml: test intentionally mutates data/appointments.yml (opts out of the corruption canary)",
+    "mutates_pubmed_sync_sidecar: test intentionally mutates data/publications_pubmed_sync.json (opts out of the corruption canary)",
+    "mutates_citation_snapshot: test intentionally mutates data/citation_counts.json (opts out of the corruption canary)",
+]

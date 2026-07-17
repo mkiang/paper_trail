@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Find &amp; replace — CV Editor{% endblock %}
+{% block content %}
+<h1>Find &amp; replace across all sections</h1>
+<p class="hint">
+  Literal text replace in editable free-text fields (titles, journals, venues,
+  roles, awards, institutions, notes, &hellip;). Structured fields — DOIs, PMIDs,
+  dates, years, page ranges, grant numbers — and <em>publication</em> author lists
+  are <strong>not</strong> touched (use
+  <a href="{{ url_for('publication_rename_author') }}">Rename author</a> for
+  publication authors). Note: presentation/poster author lines are plain text and
+  <em>are</em> in scope, so a name change there will affect how it renders.
+  Preview every match and uncheck any you don't want before applying.
+</p>
+
+{# ---------------- ASK ---------------- #}
+{% if stage == 'ask' %}
+<form method="POST" action="{{ url_for('search_replace') }}" id="replace-form">
+  <div class="form-row">
+    <label for="rp-needle">Find</label>
+    <input type="text" id="rp-needle" name="needle" value="{{ needle }}" autofocus
+           placeholder="Exact text to find">
+  </div>
+  <div class="form-row">
+    <label for="rp-repl">Replace with</label>
+    <input type="text" id="rp-repl" name="replacement" value="{{ replacement }}"
+           placeholder="Leave empty to delete the matched text">
+  </div>
+  <div class="form-row">
+    <label for="rp-case">Match case</label>
+    <input type="checkbox" id="rp-case" name="case_sensitive" value="1"
+           {% if case_sensitive %}checked{% endif %}>
+    <span class="hint">On by default elsewhere; here it is off unless checked.</span>
+  </div>
+  <div class="form-actions">
+    <button type="submit" name="action" value="preview" class="btn-primary">Preview</button>
+    <a href="{{ url_for('index') }}" class="btn-secondary" data-skip-dirty>Cancel</a>
+  </div>
+</form>
+<script src="{{ url_for('static', filename='form_dirty_guard.js') }}"></script>
+<script>FormDirtyGuard.attach("replace-form");</script>
+{% endif %}
+
+{# ---------------- PREVIEW ---------------- #}
+{% if stage == 'preview' %}
+<form method="POST" action="{{ url_for('search_replace') }}" id="replace-form">
+  <input type="hidden" name="needle" value="{{ needle }}">
+  <input type="hidden" name="replacement" value="{{ replacement }}">
+  {% if case_sensitive %}<input type="hidden" name="case_sensitive" value="1">{% endif %}
+  {% for sec, m in section_mtimes.items() %}
+  <input type="hidden" name="mtime_{{ sec }}" value="{{ m }}">
+  {% endfor %}
+
+  <div class="banner banner-info">
+    Replacing <code>{{ needle }}</code> with <code>{{ replacement }}</code>
+    ({{ "case-sensitive" if case_sensitive else "case-insensitive" }}).
+    <strong>{{ total_count }}</strong> {{ total_count|pluralize("match", "matches") }}
+    in <strong>{{ hits|length }}</strong> {{ hits|length|pluralize("field", "fields") }} across
+    <strong>{{ breakdown|length }}</strong> {{ breakdown|length|pluralize("section", "sections") }}:
+    {% for key, (label, n) in breakdown.items() %}{{ label }} ({{ n }}){% if not loop.last %}, {% endif %}{% endfor %}.
+  </div>
+
+  <table class="entries data-replace-table">
+    <thead>
+      <tr>
+        <th scope="col"><input type="checkbox" id="rp-all" checked aria-label="Toggle all"></th>
+        <th scope="col">Section</th>
+        <th scope="col">Entry</th>
+        <th scope="col">Field</th>
+        <th scope="col">Before &rarr; After</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in hits %}
+      <tr {% if h.markup_unbalanced %}class="replace-risky"{% endif %}>
+        <td>
+          <input type="checkbox" name="hit" value="{{ h.key }}" class="rp-hit"
+                 {% if not h.markup_unbalanced %}checked{% endif %}
+                 aria-label="Apply this replacement">
+        </td>
+        <td class="muted">{{ breakdown[h.section][0] if h.section in breakdown else h.section }}</td>
+        <td><a href="{{ url_for('entry_view', section=h.section, idx=h.global_idx) }}">{{ h.entry_label }}</a></td>
+        <td><code>{{ h.field }}</code>{% if h.count > 1 %} <span class="muted">x{{ h.count }}</span>{% endif %}</td>
+        <td>
+          <div class="replace-before">{{ h.before }}</div>
+          <div class="replace-after">{{ h.after }}</div>
+          {% if h.markup_unbalanced %}
+          <div class="replace-warn"><strong>WARNING</strong> — this would unbalance Typst markup
+            (<code>*</code>/<code>_</code>) or introduce a bare <code>$</code>. Unchecked by
+            default; check only if you are sure.</div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="form-actions">
+    <button type="submit" name="action" value="apply" class="btn-primary">Apply selected</button>
+    <button type="submit" name="action" value="preview" class="btn-secondary">Refresh preview</button>
+    <a href="{{ url_for('search_replace') }}" class="btn-secondary" data-skip-dirty>Start over</a>
+  </div>
+</form>
+<script src="{{ url_for('static', filename='form_dirty_guard.js') }}"></script>
+<script>
+  FormDirtyGuard.attach("replace-form");
+  (function () {
+    const all = document.getElementById("rp-all");
+    if (!all) return;
+    const boxes = () => Array.from(document.querySelectorAll(".rp-hit"));
+    all.addEventListener("change", () => { boxes().forEach(b => { b.checked = all.checked; }); });
+  })();
+</script>
+{% endif %}
+
+{# ---------------- MANIFEST ---------------- #}
+{% if stage == 'manifest' %}
+<div class="banner {% if failed %}banner-warn{% else %}banner-ok{% endif %}">
+  {% if failed %}
+    Partial apply — wrote {{ wrote|length }} file(s), then stopped on an error.
+    Files already written are saved (restore each from its Backups page if needed).
+  {% else %}
+    Done — replaced text in {{ wrote|length }} file(s).
+  {% endif %}
+</div>
+
+{% if wrote %}
+<h2>Written</h2>
+<ul>
+  {% for w in wrote %}
+  <li>{{ w.label }} — {{ w.count }} {{ w.count|pluralize("field", "fields") }} changed
+    (<a href="{{ url_for('entry_backups', section=w.section) }}">Backups</a>).</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if failed %}
+<h2>Failed</h2>
+<p class="replace-warn"><strong>{{ failed.label }}</strong> — {{ failed.reason }}</p>
+{% if not_attempted_labels %}
+<h2>Not attempted (stopped after the failure)</h2>
+<ul>{% for lbl in not_attempted_labels %}<li>{{ lbl }}</li>{% endfor %}</ul>
+{% endif %}
+{% endif %}
+
+<div class="form-actions">
+  <a href="{{ url_for('search_replace') }}" class="btn-secondary">Another find &amp; replace</a>
+  <a href="{{ url_for('index') }}" class="btn-secondary">Back to sections</a>
+</div>
+{% endif %}
+{% endblock %}

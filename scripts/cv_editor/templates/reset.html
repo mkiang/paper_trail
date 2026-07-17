@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Reset CV data — CV Editor{% endblock %}
+{% block content %}
+<h1>Reset CV data</h1>
+
+{# ---------------- CONFIRM ---------------- #}
+{% if stage == 'confirm' %}
+<p class="hint">
+  Replaces <strong>every</strong> section file in <code>data/</code> with a
+  fresh tree. The current corpus — every YAML, both sidecars, and the QC
+  reports — is snapshotted first, so nothing is unrecoverable; each section
+  also stays individually restorable from its Backups page.
+</p>
+
+<form method="POST" action="{{ url_for('reset_cv') }}" id="reset-form">
+  <fieldset class="form-row">
+    <legend>Reset to</legend>
+    <label>
+      <input type="radio" name="mode" value="example"
+             {% if mode == 'example' %}checked{% endif %}>
+      <strong>Example corpus</strong> — a small fictional CV (Jane Q Public)
+      that demos every feature; good for exploring the editor.
+    </label><br>
+    <label>
+      <input type="radio" name="mode" value="blank"
+             {% if mode == 'blank' %}checked{% endif %}>
+      <strong>Blank CV</strong> — empty sections with the full schema
+      documentation in each file header, plus a placeholder Meta to fill in.
+    </label>
+  </fieldset>
+
+  <h2>What will happen</h2>
+  <ul>
+    <li>Everything is snapshotted to
+      <code>.cv_editor_backups/reset-&lt;timestamp&gt;/</code> (data files,
+      sidecars, QC reports) with a manifest.</li>
+    <li>All 10 section files are rewritten — <strong>including Meta</strong>
+      (your name, contacts, address); each rewrite leaves a per-file backup
+      reachable from its Backups page.</li>
+    <li>The PubMed-sync sidecar and citation-count caches are cleared —
+      they describe the old corpus.</li>
+    <li>QC reports and triage decisions move into the snapshot.</li>
+    <li>Built PDFs in <code>output/</code> are <em>not</em> touched — they
+      still show the old corpus until the next rebuild.</li>
+  </ul>
+
+  {% if corpus_empty %}
+  <div class="banner banner-info">
+    The corpus is empty — nothing to lose, no confirmation phrase needed.
+  </div>
+  {% else %}
+  <div class="form-row">
+    <label for="reset-confirm">
+      Type <code id="reset-phrase">reset to {{ mode }}</code> to confirm
+    </label>
+    <input type="text" id="reset-confirm" name="confirm_phrase"
+           autocomplete="off" spellcheck="false" autofocus>
+    <span class="hint">The phrase must match the selected mode — a
+      double-check that you are resetting to what you think you are.</span>
+  </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <button type="submit" class="btn-destructive">Reset CV data</button>
+    <a href="{{ url_for('index') }}" class="btn-secondary">Cancel</a>
+  </div>
+</form>
+<script>
+  (function () {
+    const phrase = document.getElementById("reset-phrase");
+    if (!phrase) return;
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+      r.addEventListener("change", function () {
+        phrase.textContent = "reset to " + r.value;
+      });
+    });
+  })();
+</script>
+{% endif %}
+
+{# ---------------- MANIFEST (success) ---------------- #}
+{% if stage == 'manifest' %}
+<div class="banner banner-ok">
+  Reset to the {{ 'example corpus' if mode == 'example' else 'blank CV' }} complete.
+</div>
+
+<h2>Snapshot</h2>
+<p>The previous corpus is preserved at
+  <code>{{ manifest.snapshot_dir }}</code> (with a <code>manifest.json</code>
+  listing every file). A save that landed while the snapshot was being taken
+  is still captured in that section's per-file backup.</p>
+
+<h2>Sections rewritten</h2>
+<ul>
+  {% for label, url in backup_links %}
+  <li>{{ label }} (<a href="{{ url }}">Backups</a>)</li>
+  {% endfor %}
+</ul>
+
+{% if manifest.phases.sidecars %}
+<h2>Sidecars</h2>
+<ul>
+  {% for name, what in manifest.phases.sidecars.items() %}
+  <li><code>{{ name }}</code> — {{ what }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if manifest.phases.qc_moved %}
+<h2>QC reports moved into the snapshot</h2>
+<ul>
+  {% for name in manifest.phases.qc_moved %}<li><code>{{ name }}</code></li>{% endfor %}
+</ul>
+{% endif %}
+
+<h2>Undo</h2>
+<p>Per section: the Backups links above restore individual files. Whole
+  corpus by hand:
+  <code>cp {{ manifest.snapshot_dir }}/data/* data/</code>
+  (plus <code>{{ manifest.snapshot_dir }}/qc/*</code> back into
+  <code>qc/</code> if you need the old reports, and
+  <code>{{ manifest.snapshot_dir }}/.cache/citation_counts.json</code> back
+  into <code>.cache/</code> so a later snapshot-regenerate doesn't blank the
+  restored counts).</p>
+
+<div class="form-actions">
+  <a href="{{ url_for('index') }}" class="btn-primary">Back to the editor</a>
+  {% if mode == 'example' %}
+  <span class="hint">The rebuild bar on the index will offer to build the
+    example corpus's PDFs.</span>
+  {% else %}
+  <span class="hint">Start with the onboarding card on the index — set your
+    name in Meta, then add entries.</span>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------------- FAILED (mid-run) ---------------- #}
+{% if stage == 'failed' %}
+<div class="banner banner-warn">
+  Reset FAILED mid-run: {{ error }}
+</div>
+<p>Snapshots are taken <em>before</em> any file is rewritten. If this run got
+  as far as its snapshot, it is the newest
+  <code>.cv_editor_backups/reset-*</code> directory
+  {%- if manifest and manifest.snapshot_dir %} (currently
+  <code>{{ manifest.snapshot_dir }}</code> — verify the timestamp matches this
+  attempt before restoring from it){% endif %}, and its
+  <code>manifest.json</code> records exactly which phases completed.
+  Re-running the reset completes the job.</p>
+<div class="form-actions">
+  <a href="{{ url_for('reset_cv') }}" class="btn-secondary">Try again</a>
+  <a href="{{ url_for('index') }}" class="btn-secondary">Back to the editor</a>
+</div>
+{% endif %}
+{% endblock %}

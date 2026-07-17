@@ -1,0 +1,33 @@
+- subsection: Peer-Reviewed Original Research
+  entries:
+    - title: A study of *examples* and things
+      authors:
+        - Smith J
+        - Public JQ
+        - name: Doe A
+          co_senior: true
+      journal: Journal of Examples
+      year: 2024
+      month: 3
+      day: 5
+      volume: '9'
+      issue: '2'
+      pages: 100-12
+      doi: 10.1/abc
+      pmid: '12345678'
+    - title: Electronic-only article
+      authors:
+        - Public JQ
+        - name: Roe B
+          co_first: true
+      journal: Open Examples
+      year: 2023
+      pages: e069008
+      pmcid: PMC999
+    - title: This one is hidden from public
+      authors:
+        - Public JQ
+      journal: Secret J
+      year: 2022
+      hide-from:
+        - public-health

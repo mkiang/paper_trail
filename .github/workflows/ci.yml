@@ -1,7 +1,37 @@
 name: ci
-on: [push, pull_request]
+
+# mk()/footer eval can read local files into the PDF (see SECURITY.md), so the
+# render job must never expose secrets to untrusted PR code. Use pull_request
+# (NOT pull_request_target) and a read-only token.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
 jobs:
-  build:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]"   # ruff pinned via the dev extra (single source of truth)
+      - run: ruff check scripts tests
+      - run: ruff format --check scripts tests
+
+  leak-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # git grep over full tree
+      - run: bash scripts/ci_leak_check.sh
+
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -11,10 +41,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install pyyaml pytest
-      - run: python3 scripts/validate_cv.py
+      - run: pip install -e ".[dev]"
+      # Bespoke/font-coupled tests skip cleanly (no private template shipped).
+      - run: python -m pytest -q -p no:randomly
       - run: ./build.sh
-      - run: pytest tests/ -q
+      - run: python scripts/build_example.py
+
   latest-typst-canary:
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -23,4 +55,4 @@ jobs:
       - uses: typst-community/setup-typst@v3
         with:
           typst-version: latest
-      - run: typst compile cv.typ /tmp/out.pdf
+      - run: typst compile --ignore-system-fonts cv.typ /tmp/out.pdf

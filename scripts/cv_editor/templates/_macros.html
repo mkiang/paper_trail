@@ -1,0 +1,434 @@
+{# Shared Jinja macros. Import via: {% from "_macros.html" import mtime_field %} #}
+
+{# R8-M4: mtime_field — boilerplate `<input type="hidden" name="mtime_ns"
+   value="{{ mtime_ns }}">` appears in 20+ places across 11 templates.
+   Single grep target for "every mtime-guarded form" audits. #}
+{% macro mtime_field(mtime_ns) -%}
+<input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+{%- endmacro %}
+
+{# T2.2b: human-readable label for a tracker-cache status enum.
+   Mirror of the values in altmetric_tracker_cache.ResolveStatus. #}
+{% macro tracker_status_label(status) -%}
+{%- if status == 'resolved' -%}Resolved
+{%- elif status == 'failed_network' -%}Network error
+{%- elif status == 'failed_rate_limit' -%}Rate-limited
+{%- elif status == 'failed_no_redirect' -%}No redirect
+{%- elif status == 'unknown' -%}Not yet tried
+{%- else -%}{{ status }}
+{%- endif -%}
+{% endmacro %}
+
+{# V13 finish: unresolved-tracker banner.
+   Used on entry_view (per-publication) and index.html (global count). #}
+{% macro tracker_banner_entry(tracker_count, pub_idx, mtime_ns) %}
+{% if tracker_count and tracker_count > 0 %}
+<div class="banner banner-warn">
+  <strong>{{ tracker_count }} media tracker {{ tracker_count|pluralize("URL", "URLs") }} awaiting resolution.</strong>
+  Tracker URLs (<code>ct.moreover.com/...</code>) work for human clicks but look opaque in the
+  CV. Resolution falls back to unshorten.me when local network blocks the
+  tracker host. Cached attempts won't be retried.
+  <form method="POST"
+        action="{{ url_for('publication_trackers_resolve_entry', idx=pub_idx) }}"
+        style="display:inline-block; margin-left:.75em;"
+        onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Resolving (up to {{ tracker_count * 35 }}s)…';">
+    <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+    <button type="submit" class="btn-primary">Resolve now</button>
+  </form>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# V19: PubMed-sync flagged-conflict banner on entry_view.
+   Surfaces when the sidecar's EntryRecord.fields_flagged is non-empty
+   for this entry's PMID. Click-through to /pubmed_sync resolves.
+   NOT merged with pubmed_sync_banner_global — entry-level shape lists
+   the specific fields inline; see plans/tier-b-tech-debt.md B7. #}
+{% macro pubmed_sync_banner_entry(flagged_fields) %}
+{% if flagged_fields %}
+{% set _n = flagged_fields | length %}
+<div class="banner banner-warn">
+  <strong>{{ _n }} PubMed {{ _n|pluralize("disagreement", "disagreements") }}
+  pending triage.</strong>
+  {{ _n|pluralize("Field", "Fields") }}:
+  {% for f in flagged_fields %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+  <a href="{{ url_for('pubmed_sync_view') }}">Open PubMed sync &rarr;</a>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro tracker_banner_global(tracker_counts, stale_resolved_count=0) %}
+{% set total = tracker_counts.total_trackers if tracker_counts else 0 %}
+{% set pubs = tracker_counts.pubs_with_trackers if tracker_counts else 0 %}
+{% if total and total > 0 %}
+<div class="banner banner-warn">
+  <strong>{{ pubs }} {{ pubs|pluralize("publication", "publications") }}
+  {{ pubs|pluralize("has", "have") }}
+  {{ total }} unresolved tracker {{ total|pluralize("URL", "URLs") }}.</strong>
+  <a href="{{ url_for('publications_trackers') }}">Open the Trackers page &rarr;</a>
+</div>
+{% endif %}
+{# V20 post-impl (2026-05-18): secondary banner when there are no
+   unresolved trackers but resolved URLs are past the 30-day TTL.
+   Without this, a user with 0 unresolved + 50 stale-resolved has no
+   nav hint to the Trackers page (the primary banner above stays
+   hidden). #}
+{% if stale_resolved_count and stale_resolved_count > 0 %}
+<div class="banner banner-info">
+  <strong>{{ stale_resolved_count }} resolved tracker {{ stale_resolved_count|pluralize("URL", "URLs") }} &ge;30 days old.</strong>
+  <a href="{{ url_for('publications_trackers') }}">Open the Trackers page to verify &rarr;</a>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# V13-V19-D R3-M6 (2026-05-18): two banners that mirror tracker_banner_global
+   for the other editor-wide queues. Both render nothing when count is 0 so
+   the index stays clean on healthy state. #}
+
+{% macro pubmed_sync_banner_global(flagged_count, pubmed_cross_silenced_count=0) %}
+{% if flagged_count and flagged_count > 0 %}
+<div class="banner banner-warn">
+  <strong>{{ flagged_count }} PubMed {{ flagged_count|pluralize("disagreement", "disagreements") }} pending triage.</strong>
+  <a href="{{ url_for('pubmed_sync_view') }}">Open the PubMed sync page &rarr;</a>
+  {% if pubmed_cross_silenced_count and pubmed_cross_silenced_count > 0 %}
+  <div class="muted" style="margin-top: 0.3rem; font-size: 0.9em;">
+    ({{ pubmed_cross_silenced_count }} additional {{ pubmed_cross_silenced_count|pluralize("flag", "flags") }}
+    silenced by matching QC {{ pubmed_cross_silenced_count|pluralize("decision", "decisions") }}.)
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro citations_banner_global(never_attempted) %}
+{% if never_attempted and never_attempted > 0 %}
+<div class="banner banner-info">
+  <strong>Citation counts not yet fetched for {{ never_attempted }}
+  {{ never_attempted|pluralize("publication", "publications") }}.</strong>
+  <a href="{{ url_for('citations_view') }}">Open the Citations page &rarr;</a>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# V23-B Phase 3 (2026-05-25): QC findings banner on the index.
+   Renders nothing when count is 0 so the index stays clean on healthy
+   state. Phase 1 upgrade: count comes from effective_findings (post-
+   decisions), not raw summary.total_findings. The triage page + this
+   banner agree by construction (V13-V19-D R2-H1 invariant). #}
+{# M5 5c-i: whole-corpus validation banner. Errors break the build (warn
+   style); warnings render but are likely wrong (info style). Renders nothing
+   when both counts are 0, so a clean corpus stays banner-free. #}
+{% macro onboarding_banner_global(corpus_empty) %}
+{# M5-5d CP8: first-run affordance. Shown ONLY when scaffold.corpus_is_empty
+   says there is provably nothing to lose (fail-closed — a corpus that merely
+   failed to parse never triggers this). No reset-to-blank link: the corpus
+   is already blank, that would be a dead affordance. #}
+{% if corpus_empty %}
+<div class="banner banner-info">
+  <strong>No CV data yet.</strong>
+  Start by <a href="{{ url_for('meta_edit') }}">setting your name in Meta</a>,
+  <a href="{{ url_for('reset_cv', mode='example') }}">load the example CV</a>
+  to explore, or add a first entry with the <strong>+</strong> button on any
+  section card below.
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro data_check_banner_global(error_count, warning_count) %}
+{% if error_count and error_count > 0 %}
+<div class="banner banner-warn">
+  <strong>{{ error_count }} data {{ error_count|pluralize("error", "errors") }} will break the build.</strong>
+  <a href="{{ url_for('validate_data') }}">Review &amp; fix &rarr;</a>
+  {% if warning_count and warning_count > 0 %}
+  <div class="muted" style="margin-top: 0.3rem; font-size: 0.9em;">
+    (plus {{ warning_count }} {{ warning_count|pluralize("warning", "warnings") }}.)
+  </div>
+  {% endif %}
+</div>
+{% elif warning_count and warning_count > 0 %}
+<div class="banner banner-info">
+  <strong>{{ warning_count }} data {{ warning_count|pluralize("warning", "warnings") }} to review.</strong>
+  <a href="{{ url_for('validate_data') }}">Open validation &rarr;</a>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro qc_findings_banner_global(qc_findings_count, qc_cross_silenced_count=0) %}
+{% if qc_findings_count and qc_findings_count > 0 %}
+<div class="banner banner-info">
+  <strong>{{ qc_findings_count }} QC {{ qc_findings_count|pluralize("finding", "findings") }} pending triage.</strong>
+  <a href="{{ url_for('qc_triage_view') }}">Open the QC triage page &rarr;</a>
+  {% if qc_cross_silenced_count and qc_cross_silenced_count > 0 %}
+  <div class="muted" style="margin-top: 0.3rem; font-size: 0.9em;">
+    ({{ qc_cross_silenced_count }} additional {{ qc_cross_silenced_count|pluralize("finding", "findings") }}
+    silenced by matching PubMed sync {{ qc_cross_silenced_count|pluralize("decision", "decisions") }}.)
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro future_pending_banner_global(future_pending_count) %}
+{% if future_pending_count and future_pending_count > 0 %}
+<div class="banner banner-info">
+  <strong>{{ future_pending_count }} date-conditional {{ future_pending_count|pluralize("entry", "entries") }}.</strong>
+  {{ future_pending_count|pluralize("This entry is", "These entries are") }} hidden from normal builds until a future start date, or {{ future_pending_count|pluralize("renders", "render") }} open-ended until a future end date passes. Look for the <span class="badge future-badge">future</span> / <span class="badge future-badge">ongoing</span> badge in each section. Build the <code>review</code> or <code>everything</code> variant (or <code>--input show_future=true</code>) to preview {{ future_pending_count|pluralize("it", "them") }}.
+</div>
+{% endif %}
+{% endmacro %}
+
+{# V23-B Phase 1.5 (2026-05-26): cross-silenced collapsible section.
+   Renders below each finding-type's active table on /qc/triage and the
+   PubMed-sync triage page. NO radio inputs — purely informational. #}
+{% macro cross_silenced_section(rows, source_label, source_url=None) %}
+{% if rows and rows|length > 0 %}
+<details class="qc-cross-silenced-section" style="margin: 0.5rem 0 1rem;">
+  <summary style="cursor: pointer; color: #666;">
+    <strong>{{ rows|length }}</strong> {{ rows|length|pluralize("finding", "findings") }} silenced by {{ source_label }}
+    {% if source_url %}
+    <a href="{{ source_url }}" style="margin-left: 0.5rem; font-size: 0.85em;">view {{ source_label }} &rarr;</a>
+    {% endif %}
+  </summary>
+  <table class="qc-triage-table" style="margin-top: 0.5rem;">
+    <thead>
+      <tr>
+        <th>Subsection / #</th>
+        <th>Title / PMID</th>
+        <th>Field</th>
+        <th>YAML value</th>
+        <th>Silenced by</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="qc-cross-silenced-row">
+        <td>{{ r.get('subsection', '') }}{% if r.get('entry_index') %} #{{ r.entry_index }}{% endif %}</td>
+        <td>
+          {{ (r.get('title_preview') or '')[:60] }}
+          {% if r.get('pmid') %}<br><code style="font-size: 0.85em;">PMID {{ r.pmid }}</code>{% endif %}
+        </td>
+        <td><code>{{ r.get('field') or '' }}</code></td>
+        <td class="triage-yaml">{{ r.get('yaml_value') or '' }}</td>
+        <td class="muted" style="font-size: 0.9em;">
+          {% set _badge = r.get('_cross_silenced_by') or {} %}
+          {% if _badge.get('reason') %}
+            "{{ _badge.reason }}"<br>
+          {% else %}
+            <em>no reason given</em><br>
+          {% endif %}
+          {% if _badge.get('decided_at') %}
+          <span style="font-size: 0.85em;">{{ _badge.decided_at[:10] }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+{% endmacro %}
+
+{# V23-B Phase 1 (2026-05-25): per-entry QC banner on entry_view.
+   Shown when this publication has effective findings (post-decisions).
+   Same predicate as the index banner + the triage page (V13-V19-D R2-H1
+   invariant — banner truth = triage truth). #}
+{% macro qc_findings_banner_entry(qc_entry_findings) %}
+{% if qc_entry_findings and qc_entry_findings|length > 0 %}
+{% set _n = qc_entry_findings|length %}
+<div class="banner banner-info">
+  <strong>{{ _n }} QC {{ _n|pluralize("finding", "findings") }} for this entry.</strong>
+  {% set _types = qc_entry_findings|map(attribute='type')|list %}
+  {% set _mm = _types|select('equalto', 'MISMATCH')|list|length %}
+  {% set _va = _types|select('equalto', 'VARIANT')|list|length %}
+  {% set _ie = _types|select('equalto', 'ID_ENRICHMENT')|list|length %}
+  {% set _pm = _types|select('equalto', 'PMID_MISMATCH')|list|length %}
+  {% set _sa = _types|select('equalto', 'SELF_ABSENT')|list|length %}
+  <span class="muted">
+    {% if _mm %}{{ _mm }} {{ _mm|pluralize("mismatch", "mismatches") }} · {% endif %}
+    {% if _va %}{{ _va }} {{ _va|pluralize("variant", "variants") }} · {% endif %}
+    {% if _ie %}{{ _ie }} ID {{ _ie|pluralize("enrichment", "enrichments") }} · {% endif %}
+    {% if _pm %}{{ _pm }} PMID {{ _pm|pluralize("mismatch", "mismatches") }} · {% endif %}
+    {% if _sa %}{{ _sa }} self-absent · {% endif %}
+  </span>
+  <a href="{{ url_for('qc_triage_view') }}">Open QC triage &rarr;</a>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# V20-cleanup M4 (2026-05-18): the per-flag triage row was hand-
+   mirrored ~18 lines inside pubmed_sync.html. Extract here so:
+   (a) the rendering side has a single point of change when a 4th
+       decision type lands (e.g. `keep_pubmed_force_resurface`),
+   (b) the form input `name=` convention stays in lockstep with the
+       `pubmed_sync_apply` parser (`decision-{pmid}-{field}` /
+       `reason-{pmid}-{field}`).
+   The macro is the named SEAM between render and parse, even at a
+   single use site — V20 post-impl review reviewer-B's recommendation. #}
+{# V23-B Phase 1 (2026-05-25): QC triage row.
+
+   Per-finding-type rendering for MISMATCH / VARIANT / ID_ENRICHMENT.
+   Decisions are keyed by the finding's stable id (NOT pmid+field —
+   QC findings span entries without PMIDs and have multiple finding
+   types per entry).
+
+   Args:
+     f: the finding dict (carries .id, .type/._finding_type, .field
+        or .suggested_field, .yaml_value, .canonical_value, .global_idx,
+        .length_changed, etc.).
+     prior_decision: existing Decision object (or None) — pre-checks
+        the radio if the user already triaged this finding.
+     pending_form: dict from 409 re-population — overrides
+        prior_decision when present.
+
+   Defaults (UX H1 / Q1):
+     - VARIANT: radio defaults to keep_yaml.
+     - MISMATCH + ID_ENRICHMENT: no default (force explicit).
+
+   Authors-with-length-changed (U-H4):
+     - apply radio gets aria-describedby + warning chip.
+     - Inline <details> confirm rendered; the per-row confirm-<fid>
+       form field is what the server-side guard checks.
+#}
+{% macro qc_triage_row(f, prior_decision=None, pending_form={}, edit_url=None) %}
+{% set fid = f.id %}
+{% set ftype = f._finding_type or f.type %}
+{% set _decision_key = 'decision-' ~ fid %}
+{% set _reason_key = 'reason-' ~ fid %}
+{% set _confirm_key = 'confirm-' ~ fid %}
+{# Resolve the radio's current value: pending form > prior decision >
+   per-type default. #}
+{% set _pending = pending_form.get('form', {}) if pending_form else {} %}
+{% set _prior_val = (_pending.get(_decision_key) if _pending else None) %}
+{% if _prior_val is none and prior_decision %}
+  {% set _prior_val = prior_decision.decision %}
+{% endif %}
+{% if _prior_val is none and ftype == 'VARIANT' %}
+  {% set _prior_val = 'keep_yaml' %}
+{% endif %}
+{% set _prior_reason = _pending.get(_reason_key) if _pending else None %}
+{% if _prior_reason is none and prior_decision %}
+  {% set _prior_reason = prior_decision.reason or '' %}
+{% endif %}
+{% set _field_name = f.field if ftype in ('MISMATCH', 'VARIANT') else f.suggested_field %}
+{% set _length_changed = (ftype in ('MISMATCH', 'VARIANT')) and f.field == 'authors' and f.length_changed %}
+<tr id="row-{{ fid }}" class="qc-triage-row {% if _length_changed %}qc-row-length-changed{% endif %}"
+    data-finding-id="{{ fid }}"
+    data-finding-type="{{ ftype }}"
+    data-length-changed="{{ 'true' if _length_changed else 'false' }}">
+  <td>
+    {{ f.subsection }} #{{ f.entry_index }}
+    {# Post-impl U-M4 fix (2026-05-25): jump-to-edit affordance so the
+       user can inspect surrounding context before triaging. #}
+    {% if edit_url %}
+    <br><a class="qc-row-edit-link" href="{{ edit_url }}"
+           title="Open the entry in the editor">edit &rarr;</a>
+    {% endif %}
+  </td>
+  <td>{{ f.title_preview }}</td>
+  <td><code>{{ _field_name or '' }}</code></td>
+  <td class="triage-yaml">
+    {% if ftype in ('MISMATCH', 'VARIANT') %}
+      {{ f.yaml_value or '' }}
+    {% else %}
+      {# ID_ENRICHMENT: show the IDs the entry currently has #}
+      {% for k, v in (f.have or {}).items() %}
+        <span class="muted">{{ k }}:</span> <code>{{ v }}</code>{% if not loop.last %}<br>{% endif %}
+      {% endfor %}
+    {% endif %}
+  </td>
+  <td class="triage-canonical">
+    {% if ftype in ('MISMATCH', 'VARIANT') %}
+      {{ f.canonical_value or '' }}
+    {% else %}
+      {# ID_ENRICHMENT: the suggested value #}
+      <code>{{ f.suggested_value }}</code>
+    {% endif %}
+    {% if _length_changed %}
+      <span class="badge badge-warn" id="warn-{{ fid }}"
+            title="Author-list length differs; bulk-apply skips this row.">
+        ⚠ length changes
+      </span>
+    {% endif %}
+  </td>
+  <td class="triage-choice">
+    <fieldset class="triage-choice-set">
+      <legend class="visually-hidden">Decision for {{ _field_name }} on finding {{ fid }}</legend>
+      <label><input type="radio" name="{{ _decision_key }}" value="defer"
+                    class="triage-radio-defer"
+                    {% if _prior_val == 'defer' %}checked{% endif %}> defer</label>
+      <label><input type="radio" name="{{ _decision_key }}" value="keep_yaml"
+                    class="triage-radio-keep"
+                    {% if _prior_val == 'keep_yaml' %}checked{% endif %}> keep YAML</label>
+      <label><input type="radio" name="{{ _decision_key }}" value="apply"
+                    class="triage-radio-apply"
+                    {% if _length_changed %}aria-describedby="warn-{{ fid }}" aria-invalid="true"{% endif %}
+                    {% if _prior_val == 'apply' %}checked{% endif %}> apply</label>
+    </fieldset>
+    {% if ftype == 'MISMATCH' %}
+    <input type="text" name="{{ _reason_key }}"
+           class="triage-reason"
+           aria-label="Reason (required when keeping YAML value)"
+           placeholder="reason (required for keep YAML)"
+           value="{{ _prior_reason or '' }}">
+    {% elif ftype == 'VARIANT' %}
+    <input type="text" name="{{ _reason_key }}"
+           class="triage-reason"
+           aria-label="Reason (optional)"
+           placeholder="reason (optional)"
+           value="{{ _prior_reason or '' }}">
+    {% endif %}
+    {% if _length_changed %}
+    {# Post-impl C-M3 fix (2026-05-25): guard the split() against
+       missing / non-string yaml_value or canonical_value so the
+       template doesn't crash on edge findings. #}
+    {% set _yc = (f.yaml_value|string).split('; ')|length if f.yaml_value else 0 %}
+    {% set _cc = (f.canonical_value|string).split('; ')|length if f.canonical_value else 0 %}
+    <details class="qc-length-changed-confirm">
+      <summary>Confirm individually</summary>
+      <p class="muted">Author-list length differs ({{ _yc }} vs
+      {{ _cc }}). Bulk-apply skips this row;
+      check this box if you've reviewed the diff and want to apply anyway.</p>
+      <label><input type="checkbox" name="{{ _confirm_key }}" value="1"> Yes, apply despite length change</label>
+    </details>
+    {% endif %}
+  </td>
+</tr>
+{% endmacro %}
+
+
+{% macro triage_flag_row(pmid, f, global_idx, pending_form={}) %}
+{# V20-cleanup M2 (2026-05-18): pending_form re-populates the radios
+   + reason input on a re-render after the apply route rejected the
+   submission (missing reasons). Decision key is `decision-<pmid>-
+   <field>`; reason key is `reason-<pmid>-<field>`. #}
+{% set _decision_key = 'decision-' ~ pmid ~ '-' ~ f.field %}
+{% set _reason_key = 'reason-' ~ pmid ~ '-' ~ f.field %}
+{% set _prior_decision = pending_form.get(_decision_key, '') %}
+{% set _prior_reason = pending_form.get(_reason_key, '') %}
+<tr id="row-{{ pmid }}-{{ f.field }}">
+  <td><code>{{ f.field }}</code></td>
+  <td class="triage-yaml">{{ f.yaml_value }}</td>
+  <td class="triage-pubmed">{{ f.pubmed_value }}</td>
+  <td class="triage-choice">
+    <fieldset class="triage-choice-set">
+      <legend class="visually-hidden">Decision for {{ f.field }} on PMID {{ pmid }}</legend>
+      <label><input type="radio" name="decision-{{ pmid }}-{{ f.field }}" value=""
+                    class="triage-radio-defer"
+                    {% if _prior_decision == '' %}checked{% endif %}> defer</label>
+      <label><input type="radio" name="decision-{{ pmid }}-{{ f.field }}" value="keep_yaml"
+                    class="triage-radio-keep"
+                    {% if _prior_decision == 'keep_yaml' %}checked{% endif %}> keep YAML</label>
+      <label><input type="radio" name="decision-{{ pmid }}-{{ f.field }}" value="apply_pubmed"
+                    class="triage-radio-apply"
+                    {% if _prior_decision == 'apply_pubmed' %}checked{% endif %}> apply PubMed</label>
+    </fieldset>
+    <input type="text" name="reason-{{ pmid }}-{{ f.field }}"
+           class="triage-reason"
+           aria-label="Reason (required when keeping YAML value)"
+           placeholder="reason (required for keep YAML)"
+           value="{{ _prior_reason }}">
+    <a href="{{ url_for('entry_edit', section='publications', idx=global_idx) }}"
+       class="btn-link" title="Open entry in editor (no decision recorded)">edit manually</a>
+  </td>
+</tr>
+{% endmacro %}

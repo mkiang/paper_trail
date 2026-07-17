@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Diff: {{ backup_name }} — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('entry_backups', section=section_key) }}">&larr; back to backups</a></p>
+<h1>Diff: backup → current</h1>
+<p class="muted">{{ backup_name }}</p>
+
+<pre class="mono diff-pane">{{ diff }}</pre>
+
+<form method="POST" action="{{ url_for('entry_restore', section=section_key) }}" style="display:inline" onsubmit="return confirm('Restore this backup? Current file is backed up first so this is reversible.')">
+  <input type="hidden" name="backup_name" value="{{ backup_name }}">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+  <button type="submit" class="btn-secondary">Restore this backup</button>
+</form>
+{% endblock %}

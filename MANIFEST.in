@@ -1,0 +1,8 @@
+# Non-Python package data shipped inside the cv_editor wheel: the editor's
+# Jinja templates + static assets, and the bundled example corpus (the
+# reset-to-example / blank-CV seed reached via importlib.resources when no
+# engine-root data/example is present — see cv_editor.paths.example_dir).
+recursive-include scripts/cv_editor/templates *.html
+recursive-include scripts/cv_editor/static *
+recursive-include scripts/cv_editor/example_data *
+include LICENSE README.md

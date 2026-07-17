@@ -1,0 +1,40 @@
+# Education — clustered by institution. Entries within each cluster AND
+# clusters themselves are auto-sorted reverse-chronologically by date.
+# Typical education has 1 entry per institution, so cluster-sort is the
+# meaningful one here.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Schema:
+#   - institution: string. Required. Bold cluster header.
+#   - city:        string. Optional. Appended as ", city".
+#   - audiences (optional):  per-cluster allowlist. Cascades to entries.
+#   - hide-from (optional):  per-cluster blocklist. Cascades to entries.
+#   - entries:     list. Each item:
+#       - date:        string. Required. "MM/YYYY" or "YYYY".
+#       - degree:      string. Required. Rendered italic (e.g. "ScD", "MPH").
+#       - title:       string. Optional. Concentration/field. Regular weight.
+#       - department:  string. Optional. Renders on its own line below the
+#                      degree row, indented to the body column (no date).
+#       - audiences (optional):  per-entry allowlist (wins over cluster).
+#       - hide-from (optional):  per-entry blocklist (wins over cluster).
+#       - highlighted (optional, bool): hide the entry unless the build is
+#                      run with `--input show_highlighted=true`. Use for
+#                      pending / unverified items the author wants to keep
+#                      in YAML but not show on the published CV by default.
+#
+# Italics on the degree are applied by the renderer — don't markup in YAML.
+
+- institution: Example University
+  city: Exampleville, CA
+  entries:
+  - date: 05/2018
+    degree: ScD
+    title: Applied Examples
+    department: Department of Examples
+- institution: Older State College
+  city: Springfield, IL
+  entries:
+  - date: 05/2012
+    degree: BA
+    title: Sociology

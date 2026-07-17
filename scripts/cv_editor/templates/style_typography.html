@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Typography — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('style_list') }}">&larr; back to style / variants</a></p>
+<h1>Typography</h1>
+<p class="hint">Fonts, sizes, spacing, and colours. <strong>Applies to every variant</strong> (it is document-global, not per-variant). Values equal to the default are not saved; a knob that differs from the default is marked <span class="badge variant-chip variant-chip-on">modified</span>. After saving, rebuild to see the changes.</p>
+
+<form method="POST" action="{{ url_for('style_typography_save') }}" id="ty-form">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+  {% for group, rows in groups.items() %}
+  <fieldset class="ty-group">
+    <legend>{{ group }}</legend>
+    {% if group == 'Fonts' %}
+    <p class="hint">A custom family must be available to the build (bundled in the Typst binary, or present in a <code>fonts/</code> directory your template compiles with) &mdash; an unrecognised name silently falls back to a default face. Available families depend on your active template.</p>
+    {% endif %}
+    {% for r in rows %}
+    <div class="ty-row{% if errors.get(r.key) %} ty-row-error{% endif %}">
+      <label for="f_{{ r.key }}">{{ r.label }}
+        {% if r.is_modified %}<span class="badge variant-chip variant-chip-on">modified</span>{% endif %}
+      </label>
+      <div class="ty-inputs">
+        {% if r.kind == 'color' %}
+        <input type="color" class="ty-color" data-target="f_{{ r.key }}" value="{{ r.value }}">
+        {% endif %}
+        <input type="text" class="ty-input" name="{{ r.key }}" id="f_{{ r.key }}"
+               value="{{ r.value }}" data-default="{{ r.default }}" placeholder="{{ r.default }}"
+               autocomplete="off" spellcheck="false">
+        <button type="button" class="btn-secondary ty-reset" data-target="f_{{ r.key }}"
+                title="Reset to default ({{ r.default }})">reset</button>
+        <span class="muted ty-default">default {{ r.default }}</span>
+      </div>
+      {% if errors.get(r.key) %}<div class="error">{{ errors[r.key] }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </fieldset>
+  {% endfor %}
+
+  <div class="form-actions sticky-save">
+    <button type="submit" class="btn-primary">Save typography</button>
+    <span class="muted">Cmd/Ctrl+S</span>
+  </div>
+</form>
+
+<script src="{{ url_for('static', filename='typography_editor.js') }}"></script>
+{% endblock %}

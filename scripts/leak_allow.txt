@@ -1,0 +1,56 @@
+# CP4/B5 leak-scan allowlist — fictional identifiers intentionally present in the
+# SHIPPED example corpus + a few code placeholders. Read by scripts/leak_scan.py
+# (the single scanner both the exporter's leak_gate() and ci_leak_check.sh use).
+#
+# PUBLIC — this file SHIPS. Put ONLY fictional/reserved values here. Real
+# maintainer identifiers (grant #s etc.) live in the exporter's private FORBIDDEN
+# list, never in a shipped file.
+#
+# Line format:  <kind> <token>     kind = prefix | suffix | exact  (case-insensitive)
+#   prefix  match.startswith(token)   suffix  match.endswith(token)   exact  ==
+#
+# When you add a genuinely fictional identifier to data/example (or a code
+# placeholder), add it here with a comment saying where it lives.
+
+# --- DOI allowlist: one fake NAMESPACE prefix + exact code placeholders -----
+# Only 10.9999/ is a whole fake namespace (breadth appropriate). The other three
+# are EXACT single code placeholders, NOT prefixes: the owner actively publishes
+# in JAMA / posts to SSRN + arXiv, so a `prefix` rule would silently mask a real
+# 10.1001/jama.2024.1xxxx / 10.2139/ssrn.N / 10.48550/arXiv.N DOI accidentally
+# hardcoded into shipped code (CP4 re-confirm, leak-gate MED/LOW).
+prefix 10.9999/             # the example corpus's fake DOI namespace (all Jane Q Public DOIs)
+exact 10.1001/jama.2024.1   # citation-parser placeholder (add_publication.html; real JAMA prefix, fake suffix)
+exact 10.2139/ssrn          # SSRN prefix constant in preprint.py PREPRINT_DOI_PREFIXES
+exact 10.48550/arxiv        # arXiv prefix mention in preprint.py docstring (matches 10.48550/arXiv, case-folded)
+
+# --- reserved-for-documentation email domains (RFC 2606) --------------------
+suffix @example.org        # jane@example.org (example corpus)
+suffix @example.com
+suffix @example.net
+
+# --- fictional ORCIDs -------------------------------------------------------
+exact 0000-0002-1825-0097  # Carberry public sandbox ORCID (example corpus)
+exact 0000-0000-0000-0000  # null/placeholder ORCID in editor code
+
+# --- example corpus PMCID + PMIDs -------------------------------------------
+exact PMC90000001          # example corpus
+exact 90000001             # example corpus PMIDs
+exact 90000002
+exact 90000003
+
+# --- example corpus phone (RFC-ish fictional 555 number) --------------------
+exact 555-867-5309         # example corpus
+
+# --- fictional grant/award amounts (example corpus + code examples) ---------
+# HONESTY NOTE (CP4): the comma-$ pattern closes the digit-cross-check blind spot
+# (thousands-commas are stripped there), but allowlisting these example amounts
+# means a REAL grant that happens to be a common round figure (e.g. a real
+# $425,000) is the SAME string as an allowlisted value and would pass. So this
+# layer catches UNUSUAL comma-amounts absent from the corpus, NOT every real
+# amount. It is not a complete dollar-leak guard.
+exact $100,000
+exact $150,000
+exact $25,000
+exact $425,000
+exact $75,000
+exact $1,000,000           # editor-code example amount

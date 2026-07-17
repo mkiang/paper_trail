@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}CV Editor{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='editor.css') }}">
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+  <header>
+    <a href="{{ url_for('index') }}" class="brand">CV Editor</a>
+    <nav>
+      {% set PRIMARY = [
+        ('publications', 'Publications'),
+        ('presentations', 'Talks'),
+        ('research_support', 'Grants'),
+        ('service', 'Service'),
+        ('teaching', 'Teaching'),
+        ('mentees', 'Mentees'),
+      ] %}
+      {% set MORE = [
+        ('education', 'Education'),
+        ('honors', 'Honors'),
+        ('appointments', 'Appointments'),
+        ('meta', 'Meta'),
+      ] %}
+      {% set TOOLS = [
+        ('style', 'Style'),
+        ('freeze', 'Freeze'),
+        ('urls', 'URLs'),
+        ('trackers', 'Trackers'),
+        ('citations', 'Citations'),
+      ] %}
+      {% for key, label in PRIMARY %}
+      <a href="{{ url_for('section_list', section=key) }}"
+         class="{% if current_section == key %}is-current{% endif %}"{% if current_section == key %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+
+      {% set more_keys = MORE | map(attribute=0) | list %}
+      {% set tools_keys = TOOLS | map(attribute=0) | list %}
+      <details class="nav-menu {% if current_section in more_keys %}is-current{% endif %}">
+        <summary aria-label="More sections">More <span class="caret" aria-hidden="true">&#9662;</span></summary>
+        <div class="nav-menu-panel">
+          {% for key, label in MORE %}
+          <a href="{{ url_for('meta_view') if key == 'meta' else url_for('section_list', section=key) }}"
+             class="{% if current_section == key %}is-current{% endif %}"{% if current_section == key %} aria-current="page"{% endif %}>{{ label }}</a>
+          {% endfor %}
+        </div>
+      </details>
+      <details class="nav-menu {% if current_section in tools_keys %}is-current{% endif %}">
+        <summary aria-label="Editor tools">Tools <span class="caret" aria-hidden="true">&#9662;</span></summary>
+        <div class="nav-menu-panel">
+          <a href="{{ url_for('style_list') }}" class="{% if current_section == 'style' %}is-current{% endif %}">Style</a>
+          {% if capabilities.freeze %}<a href="{{ url_for('freeze_list') }}" class="{% if current_section == 'freeze' %}is-current{% endif %}">Freeze CV</a>{% endif %}
+          <a href="{{ url_for('urls_verify_view') }}" class="{% if current_section == 'urls' %}is-current{% endif %}">Verify URLs</a>
+          {% if capabilities.altmetric %}<a href="{{ url_for('publications_trackers') }}" class="{% if current_section == 'trackers' %}is-current{% endif %}">Trackers</a>{% endif %}
+          <a href="{{ url_for('citations_view') }}" class="{% if current_section == 'citations' %}is-current{% endif %}">Citations</a>
+          <a href="{{ url_for('pubmed_sync_view') }}" class="{% if current_section == 'pubmed_sync' %}is-current{% endif %}">PubMed sync</a>
+          <a href="{{ url_for('qc_triage_view') }}" class="{% if current_section == 'qc_triage' %}is-current{% endif %}">QC triage</a>
+          <a href="{{ url_for('validate_data') }}" class="{% if current_section == 'validate' %}is-current{% endif %}"{% if current_section == 'validate' %} aria-current="page"{% endif %}>Validate</a>
+          <a href="{{ url_for('search_replace') }}" class="{% if current_section == 'replace' %}is-current{% endif %}"{% if current_section == 'replace' %} aria-current="page"{% endif %}>Find &amp; replace</a>
+          <a href="{{ url_for('export_markdown') }}">Export Markdown</a>
+          <a href="{{ url_for('export_html') }}">Export HTML</a>
+          <a href="{{ url_for('reset_cv') }}" class="{% if current_section == 'reset' %}is-current{% endif %}"{% if current_section == 'reset' %} aria-current="page"{% endif %}>Reset CV data&hellip;</a>
+        </div>
+      </details>
+    </nav>
+    <form action="{{ url_for('search') }}" method="GET" class="search-form">
+      <input type="search" name="q" aria-label="Search all sections" placeholder="Search all sections" value="{{ request.args.get('q','') }}">
+    </form>
+    <form method="POST" action="{{ url_for('quit_app') }}" class="quit-form" onsubmit="return confirm('Shut the editor down? Unsaved form data will be lost.')">
+      {% if quit_token %}<input type="hidden" name="quit_token" value="{{ quit_token }}">{% endif %}
+      <button type="submit" class="btn-quit" title="Stop the local Flask server">Quit</button>
+    </form>
+  </header>
+  <main id="main" tabindex="-1">
+    {% if messages %}
+      {% for category, msg in messages %}
+      <div class="banner banner-{{ 'warn' if category == 'warn' else ('ok' if category == 'ok' else 'info') }} flash-banner" role="status">
+        <span class="banner-msg">{{ msg }}</span>
+        <button type="button" class="banner-close" aria-label="Dismiss">&times;</button>
+      </div>
+      {% endfor %}
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    // Flash banners: click X to dismiss; ok banners auto-dismiss after 6s.
+    document.querySelectorAll('.flash-banner').forEach(b => {
+      b.querySelector('.banner-close').addEventListener('click', () => b.remove());
+      if (b.classList.contains('banner-ok')) {
+        setTimeout(() => b.classList.add('fading'), 5000);
+        setTimeout(() => b.remove(), 6000);
+      }
+    });
+    // Nav dropdowns: close-others-on-open + click-outside + Escape.
+    // Click-outside uses mousedown so it fires before the link's click,
+    // which closes other menus without racing the link's navigation.
+    // The focusout-closes-on-tab-out handler was removed: Safari can
+    // return null for relatedTarget on mouse-initiated focus changes,
+    // which closed the menu mid-click and blocked link navigation.
+    (function () {
+      const menus = document.querySelectorAll('details.nav-menu');
+      menus.forEach(d => {
+        d.addEventListener('toggle', () => {
+          if (d.open) menus.forEach(o => { if (o !== d) o.open = false; });
+        });
+      });
+      document.addEventListener('mousedown', (ev) => {
+        menus.forEach(d => {
+          if (d.open && !d.contains(ev.target)) d.open = false;
+        });
+      });
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') {
+          menus.forEach(d => {
+            if (d.open) {
+              d.open = false;
+              d.querySelector('summary').focus();
+            }
+          });
+        }
+      });
+    })();
+  </script>
+  <footer>
+    <span class="muted">Local · 127.0.0.1 · single-user</span>
+  </footer>
+</body>
+</html>

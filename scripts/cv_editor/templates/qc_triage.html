@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% from "_macros.html" import qc_triage_row, cross_silenced_section %}
+{% block title %}QC triage — CV Editor{% endblock %}
+{% block content %}
+<h1>QC triage</h1>
+<p class="muted">
+  Cross-checks every entry in <code>data/publications.yml</code> against
+  PubMed (E-utilities) and Crossref, plus internal consistency checks
+  (author / journal name variants, missing IDs, self-absent). Sidecar
+  state lives at <code>qc/report.json</code>; decisions at
+  <code>qc/qc_decisions.json</code>; cached HTTP responses go to
+  <code>.cache/qc/</code> (gitignored).
+</p>
+
+<div class="toolbar">
+  <div class="toolbar-actions">
+    <form method="POST" action="{{ url_for('qc_triage_run') }}" style="display:inline">
+      <button type="submit" class="btn-primary"
+              {% if status.running or status.applying %}disabled{% endif %}
+              title="Re-run `python -m cv_editor.qc_publications` and regenerate qc/report.{md,json}.">
+        {% if status.running %}Running sweep…{% elif status.applying %}Apply in progress…{% else %}Run QC sweep{% endif %}
+      </button>
+    </form>
+    {% if status.report_url %}
+    <a class="btn-secondary" href="{{ status.report_url }}" target="_blank" rel="noopener">View Markdown report</a>
+    {% endif %}
+  </div>
+  <div class="toolbar-filters">
+    <span class="muted toolbar-label">
+      {% if status.sidecar_loaded %}
+        Sidecar: {{ status.total_findings }} {{ status.total_findings|pluralize("finding", "findings") }}
+        {% if status.generated_at %}· Generated {{ status.generated_at }}{% endif %}
+      {% else %}
+        Sidecar missing — run the sweep to populate.
+      {% endif %}
+    </span>
+  </div>
+</div>
+
+{% if status.running %}
+<div class="banner banner-info">
+  <strong>QC sweep in progress.</strong> Refresh in ~30–90s for results.
+</div>
+{% endif %}
+
+{% if status.applying %}
+<div class="banner banner-info">
+  <strong>Apply in progress.</strong> Sweep will auto-run when it finishes.
+</div>
+{% endif %}
+
+{% if not status.sidecar_loaded %}
+<div class="banner banner-warn">
+  <strong>No QC sidecar yet.</strong>
+  Click "Run QC sweep" above (or
+  <code>python -m cv_editor.qc_publications</code> on the CLI) to populate
+  <code>qc/report.json</code>.
+</div>
+{% endif %}
+
+{# Pending-form diff banner (U-H3): when re-rendering after a 409,
+   surface findings that disappeared / appeared since the user started. #}
+{% if pending_form %}
+  {% if pending_diff.vanished or pending_diff.appeared %}
+  <div class="banner banner-warn">
+    <strong>Your prior submission was preserved, but the sidecar has changed.</strong>
+    {% if pending_diff.vanished %}
+      <div>{{ pending_diff.vanished|length }} of your decisions reference
+      findings that no longer exist:
+      {% for fid in pending_diff.vanished[:5] %}<code>{{ fid }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+      {% if pending_diff.vanished|length > 5 %} (... and more){% endif %}
+      </div>
+    {% endif %}
+    {% if pending_diff.appeared %}
+      <div>{{ pending_diff.appeared|length }} new finding(s) appeared since
+      you started; review before re-submitting.
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+{% endif %}
+
+<form method="POST" action="{{ url_for('qc_apply') }}" id="qc-triage-form">
+
+{% for sec in sections %}
+<section class="qc-triage-section" id="section-{{ sec.key }}">
+  <h2>
+    {{ sec.title }}
+    <span class="muted">({{ sec.count }})</span>
+    {% if sec.phase != 1 and sec.phase != 3 %}
+      <span class="badge badge-deferred" title="Active in Phase {{ sec.phase }}">Phase {{ sec.phase }}</span>
+    {% endif %}
+  </h2>
+  <p class="muted">{{ sec.blurb }}</p>
+
+  {% if sec.count == 0 %}
+    <p class="muted"><em>None.</em></p>
+  {% elif sec.is_active_in_phase_3 %}
+    {# Phase 3 active types: jump-to-edit only, no decision form. #}
+    <table class="qc-triage-table">
+      <thead>
+        <tr>
+          <th>Subsection</th>
+          <th>#</th>
+          <th>Title</th>
+          <th>{% if sec.key == 'pmid_mismatches' %}PMID{% else %}Reason{% endif %}</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in sec.rows %}
+        <tr data-finding-id="{{ row.id }}">
+          <td>{{ row.subsection }}</td>
+          <td>{{ row.entry_index }}</td>
+          <td>{{ row.title_preview }}</td>
+          <td>
+            {% if sec.key == 'pmid_mismatches' %}
+              <code>{{ row.pmid }}</code>
+              <span class="muted">— {{ row.reason }}</span>
+            {% else %}
+              <span class="muted">Self-author not detected in author list</span>
+            {% endif %}
+          </td>
+          <td>
+            {# Post-impl C-H2 fix (2026-05-25): use qc_to_seq to translate
+               the sidecar's QC global_idx (s_idx*10000+e_idx) to the
+               sequential flatten idx that entry_edit routes on. #}
+            {% set _seq = qc_to_seq.get(row.global_idx) %}
+            {% if _seq is not none %}
+            <a class="btn-secondary"
+               href="{{ url_for('entry_edit', section='publications', idx=_seq) }}#{{ anchor_for(row) }}"
+               title="Open the entry in the editor with the disputed field focused.">
+              Jump to edit &rarr;
+            </a>
+            {% else %}
+            <span class="muted" title="Entry not found in current publications.yml">—</span>
+            {% endif %}
+            {% if sec.key == 'self_absent' %}
+            {# Acknowledge: submitter button carries finding_id to the
+               standalone qc-ack-form (HTML5 form= attr → no nested form). #}
+            <button type="submit" form="qc-ack-form" name="finding_id" value="{{ row.id }}"
+                    class="btn-secondary"
+                    title="Dismiss — the author is legitimately not a listed author of this paper.">
+              Acknowledge
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% elif sec.phase == 1 %}
+    {# Phase 1 active types: per-row triage form. #}
+    <table class="qc-triage-table">
+      <thead>
+        <tr>
+          <th>Subsection / #</th>
+          <th>Title</th>
+          <th>Field</th>
+          <th>YAML / Have</th>
+          <th>Canonical / Suggested</th>
+          <th>Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in sec.rows %}
+          {# Annotate finding_type from section key so the macro
+             doesn't have to guess. Phase 1 sections each have a single
+             finding type. #}
+          {% set _row = row.copy() %}
+          {% if sec.key == 'mismatches' %}{% set _ = _row.update({'_finding_type': 'MISMATCH'}) %}
+          {% elif sec.key == 'variants' %}{% set _ = _row.update({'_finding_type': 'VARIANT'}) %}
+          {% elif sec.key == 'id_enrichments' %}{% set _ = _row.update({'_finding_type': 'ID_ENRICHMENT'}) %}
+          {% endif %}
+          {# Post-impl U-M4: edit URL so the row macro can render a
+             jump-to-edit affordance. qc_to_seq translates the QC
+             sidecar's idx scheme to the route's sequential idx. #}
+          {% set _seq = qc_to_seq.get(row.global_idx) %}
+          {% set _edit_url = url_for('entry_edit', section='publications', idx=_seq) if _seq is not none else none %}
+          {{ qc_triage_row(_row, prior_decision=decisions.get(row.id), pending_form=pending_form, edit_url=_edit_url) }}
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {# Per-section bulk-decision buttons (UX H1: per-section, not global).
+       Post-impl U-M6 fix (2026-05-25): visual gap between safe buttons
+       and the destructive apply button so the user doesn't tab into a
+       destructive action from a defer/keep_yaml click. #}
+    <div class="qc-bulk-actions" role="group" aria-label="Bulk decisions for {{ sec.title }}">
+      <button type="button" class="btn-secondary"
+              data-qc-bulk-decision="defer"
+              data-qc-section="{{ sec.key }}">All defer</button>
+      <button type="button" class="btn-secondary"
+              data-qc-bulk-decision="keep_yaml"
+              data-qc-section="{{ sec.key }}">All keep YAML</button>
+      <span class="qc-bulk-destructive-spacer" aria-hidden="true"
+            style="display:inline-block; width:1.5rem;"></span>
+      <button type="button" class="btn-destructive"
+              data-qc-bulk-apply
+              data-qc-section="{{ sec.key }}"
+              data-qc-finding-type="{{ 'MISMATCH' if sec.key == 'mismatches' else ('VARIANT' if sec.key == 'variants' else 'ID_ENRICHMENT') }}">
+        All apply ({{ sec.count }})
+      </button>
+      <span class="qc-bulk-status muted"
+            data-qc-bulk-status-for="{{ sec.key }}"
+            aria-live="polite"></span>
+    </div>
+
+    {# V23-B Phase 1.5 (2026-05-26): cross-silenced section. Findings
+       whose (pmid, field) matches a PubMed-sync keep_yaml override
+       drop here (no radios, purely informational). #}
+    {{ cross_silenced_section(
+        cross_silenced_by_section.get(sec.key) or [],
+        "PubMed sync",
+        url_for('pubmed_sync_view'),
+    ) }}
+  {% else %}
+    {# Phase 2/4 placeholder. #}
+    <p class="muted">
+      <em>Per-row triage UI ships in Phase {{ sec.phase }}. Today: see
+      <code>qc/report.md</code> for the human-readable list.</em>
+    </p>
+  {% endif %}
+
+  {# Acknowledged self_absent rows. Rendered OUTSIDE the count if/elif so it
+     shows even when every row is acknowledged (active count == 0). #}
+  {% if sec.key == 'self_absent' and acknowledged_self_absent %}
+  <details class="qc-acknowledged">
+    <summary>Acknowledged ({{ acknowledged_self_absent|length }}) — show</summary>
+    <p class="muted">Dismissed as legitimately self-absent. Un-acknowledge to bring one back.</p>
+    <table class="qc-triage-table">
+      <thead>
+        <tr><th>Subsection</th><th>#</th><th>Title</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for row in acknowledged_self_absent %}
+        <tr data-finding-id="{{ row.id }}">
+          <td>{{ row.subsection }}</td>
+          <td>{{ row.entry_index }}</td>
+          <td>{{ row.title_preview }}</td>
+          <td>
+            <button type="submit" form="qc-unack-form" name="finding_id" value="{{ row.id }}"
+                    class="btn-secondary">Un-acknowledge</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+</section>
+{% endfor %}
+
+{# Submit row. Only render Save when there's at least one Phase 1 section
+   with rows. #}
+{% set _has_phase1_rows = sections|selectattr('phase', 'equalto', 1)|selectattr('count', 'gt', 0)|list %}
+{% if _has_phase1_rows %}
+<div class="qc-triage-submit">
+  <button type="submit" class="btn-primary">Save decisions</button>
+  <span class="muted">Decisions for Phase 1 finding types (MISMATCH, VARIANT,
+  ID enrichment) are saved + applied in one atomic batch.</span>
+</div>
+{% endif %}
+
+</form>
+
+{# Standalone forms for the self_absent Acknowledge / Un-acknowledge buttons.
+   They live OUTSIDE the qc-apply form so the buttons (which target them via
+   the HTML5 `form=` attribute) never nest a <form> inside a <form>. The
+   submitter button's name="finding_id" value="<id>" rides along in the POST. #}
+<form id="qc-ack-form" method="POST" action="{{ url_for('qc_self_absent_acknowledge') }}"></form>
+<form id="qc-unack-form" method="POST" action="{{ url_for('qc_self_absent_acknowledge') }}">
+  <input type="hidden" name="undo" value="1">
+</form>
+
+<script src="{{ url_for('static', filename='bulk_radios.js') }}"></script>
+<script>
+(function () {
+  // M1 (2026-05-29): removed a dead build-console wiring here — it called
+  // BuildConsole.attach with the wrong option keys (consoleId/streamUrl
+  // instead of consoleEl/trigger/urlFromBtn) and there was no trigger
+  // button; the QC sweep uses /qc/triage/status polling, not SSE.
+
+  // Tier B / B6 (2026-05-27): bulk-radio handlers extracted to
+  // static/bulk_radios.js. See scripts/CLAUDE.md gotchas #51 + #57.
+  function radiosInSection(section) {
+    const sec = document.getElementById('section-' + section);
+    if (!sec) return [];
+    return Array.from(sec.querySelectorAll(
+      'tr.qc-triage-row input[type=radio][name^="decision-"]'
+    ));
+  }
+
+  function sectionStatusEl(section) {
+    return document.querySelector(
+      '[data-qc-bulk-status-for="' + section + '"]'
+    );
+  }
+
+  document.querySelectorAll('[data-qc-bulk-decision]').forEach(btn => {
+    const section = btn.dataset.qcSection;
+    BulkRadios.wireBulkDecision({
+      button: btn,
+      getRadios: () => radiosInSection(section),
+      value: btn.dataset.qcBulkDecision,
+      statusEl: sectionStatusEl(section),
+      onAfter: function (touched) {
+        const el = sectionStatusEl(section);
+        if (el) el.textContent = touched
+          ? ('Set ' + touched + ' row(s) to ' + btn.dataset.qcBulkDecision + '.')
+          : 'No changes (already set).';
+      },
+    });
+  });
+
+  document.querySelectorAll('[data-qc-bulk-apply]').forEach(btn => {
+    const section = btn.dataset.qcSection;
+    // Apply-target radios: value="apply" within rows that are NOT length_changed.
+    function applyableRadios() {
+      const sec = document.getElementById('section-' + section);
+      if (!sec) return [];
+      return Array.from(sec.querySelectorAll(
+        'tr.qc-triage-row input[type=radio][value="apply"]'
+      ));
+    }
+    function predicate(radio) {
+      // Drop radios whose row is length_changed (matches the gotcha #56
+      // / V23-B Phase 1 contract — length_changed authors require per-
+      // row confirmation, never bulk-apply).
+      const tr = radio.closest('tr.qc-triage-row');
+      return !tr || tr.dataset.lengthChanged !== 'true';
+    }
+    BulkRadios.wireBulkApplyTwoStep({
+      button: btn,
+      getRadios: applyableRadios,
+      predicate: predicate,
+      statusEl: sectionStatusEl(section),
+      armLabel: function (applicable, total, skipped) {
+        return skipped > 0
+          ? ('Click again — applies ' + applicable + ' of ' + total +
+             ' (' + skipped + ' skipped: length_changed)')
+          : ('Click again to confirm — sets ' + applicable + ' row(s) to apply');
+      },
+    });
+  });
+})();
+</script>
+{# Post-impl U-M1 fix (2026-05-25): attach FormDirtyGuard so navigating
+   away after bulk-setting radios prompts before discarding work. The
+   bulk handlers above already dispatch synthetic `change` events so
+   FormDirtyGuard observes the radio mutations. #}
+<script>FormDirtyGuard.attach("qc-triage-form");</script>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}URL verification — CV Editor{% endblock %}
+{% block content %}
+<h1>URL Verification</h1>
+<p class="muted">
+  Health-check for every URL the CV publishes — canonical DOI / PubMed / PMC links
+  derived from each entry's IDs, plus any literal URLs in <code>open_access</code>
+  values and media-note outlets. Run it now and then to catch link rot or URL-format
+  drift early.
+</p>
+
+<div class="toolbar">
+  <div class="toolbar-actions">
+    <form method="POST" action="{{ url_for('urls_verify_run') }}" style="display:inline">
+      <button type="submit" class="btn-primary" {% if status.running %}disabled{% endif %}
+              title="Skip URLs that were OK within the last 30 days.">
+        {% if status.running %}Running…{% else %}Run verifier (use cache){% endif %}
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('urls_verify_run') }}" style="display:inline"
+          onsubmit="return confirm('Force re-check every URL? Ignores the 30-day cache; takes ~2–3 minutes.')">
+      <input type="hidden" name="force" value="1">
+      <button type="submit" class="btn-secondary" {% if status.running %}disabled{% endif %}
+              title="Ignore the 30-day cache and re-check every URL from scratch.">
+        Force re-check all
+      </button>
+    </form>
+    {% if status.exists %}
+    <a class="btn-secondary" href="{{ status.url }}" target="_blank" rel="noopener">View raw report</a>
+    {% endif %}
+  </div>
+  <div class="toolbar-filters">
+    {% if status.exists %}
+    <span class="muted toolbar-label">
+      Last report: {{ status.mtime }}
+      {% if status.total is not none %} · {{ status.total }} URLs{% endif %}
+      {% if status.failed is not none %} ·
+        {% if status.failed == 0 %}<span style="color: #2a7a3a">all OK</span>
+        {% else %}<span style="color: #b03030">{{ status.failed }} failing</span>{% endif %}
+      {% endif %}
+    </span>
+    {% else %}
+    <span class="muted toolbar-label">No report yet. Click "Run verifier" to generate one.</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if status.running %}
+<div class="banner banner-info">
+  Verifier is running in the background. Cold runs take ~2–3 minutes; cached
+  re-runs return in seconds. Refresh this page when you think it's done.
+</div>
+{% endif %}
+
+{% if status.exists and status.failed and status.failed > 0 %}
+<div class="banner banner-info">
+  <strong>Heads-up on the categories below.</strong> Real failures are <code>4xx</code> /
+  <code>5xx</code> / timeout / dns / ssl. The <strong>Publisher-blocked</strong> section
+  lists URLs that returned 403/429 only because the publisher dislikes bots — those
+  links work fine for human readers and aren't counted in the "failing" total.
+</div>
+{% endif %}
+
+{% if report_text %}
+<pre class="url-report">{{ report_text }}</pre>
+{% endif %}
+{% endblock %}

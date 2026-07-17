@@ -1,0 +1,1047 @@
+/* Minimal styling for the CV editor. Single file. No framework. */
+
+:root {
+  --bg: #fdfdfa;
+  --fg: #222;
+  --muted: #666;
+  --accent: #36a;
+  --warn-bg: #fff3cd;
+  --warn-fg: #6b5400;
+  --info-bg: #e7f3ff;
+  --info-fg: #034975;
+  --line: #ddd;
+  --hidden: #aaa;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  margin: 0;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+
+.brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--fg);
+}
+
+nav a {
+  margin-right: 1rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+nav a:hover { text-decoration: underline; }
+
+main {
+  max-width: 1100px;
+  margin: 1.5rem auto;
+  padding: 0 1.5rem;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  margin-top: 3rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.muted { color: var(--muted); }
+.sort-sub { font-size: 0.85em; }
+
+/* Banner taxonomy (T5.2 doc, 2026-05-16):
+ *   Primary variants — banner-warn (amber), banner-info (blue),
+ *   banner-ok (green; see line ~446). Pair with `<div class="banner
+ *   banner-warn">…</div>`.
+ *   Modifiers — `rebuild-bar`, `qc-banner`, `disagree-banner`,
+ *   `tracker-banner` are stacked classes scoped to one feature each.
+ *   Don't add a new one-off modifier unless it'll be reused; new
+ *   single-use styling is CSS drift.
+ *   New variant? Add primary class here + document in scripts/CLAUDE.md
+ *   gotcha #30. */
+.banner {
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  border-left: 4px solid transparent;
+}
+.banner-warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: #d4a017; }
+.banner-info { background: var(--info-bg); color: var(--info-fg); border-left-color: #36a; }
+.banner code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 2px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.card {
+  display: block;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  text-decoration: none;
+  color: var(--fg);
+}
+.card:hover { border-color: var(--accent); }
+.card-title { font-weight: 600; }
+.card-meta { color: var(--muted); margin-top: 0.25rem; font-size: 0.9em; }
+
+/* V15: quick-add `+` button overlay. The wrapper lets us absolutely
+   position the button on top of the card link without breaking the
+   whole-card-clickable navigation. */
+.card-wrap { position: relative; }
+.btn-quick-add {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--accent, #36a);
+  color: white;
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1.6rem;
+  text-align: center;
+  text-decoration: none;
+  /* R3-M3 fix (2026-05-17): keep the button discoverable for keyboard
+     and touch users (no hover state). Mouse users still get the
+     stronger visual cue on hover. */
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+}
+.card-wrap:hover .btn-quick-add,
+.btn-quick-add:focus,
+.btn-quick-add:focus-visible { opacity: 1; }
+.btn-quick-add:hover { background: var(--fg, #222); opacity: 1; }
+@media (hover: none) {
+  .btn-quick-add { opacity: 1; }
+}
+
+.toolbar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+table.entries {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border: 1px solid var(--line);
+}
+table.entries th, table.entries td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+table.entries th { background: #f6f6f3; font-weight: 600; }
+table.entries td.num { color: var(--muted); width: 3rem; }
+table.entries tr.is-hidden td { color: var(--hidden); font-style: italic; }
+table.entries a { color: var(--accent); text-decoration: none; }
+table.entries a:hover { text-decoration: underline; }
+
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  background: #eee;
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge.contrib-badge {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-weight: 600;
+}
+.badge.oa-badge {
+  background: #f4e8d4;
+  color: #6b4a17;
+  font-weight: 600;
+}
+.badge.future-badge {
+  background: #e4ecf7;
+  color: #274b7a;
+  font-weight: 600;
+}
+/* M5 5c-i: data-validation severity badges. The uppercase TEXT label is the
+   non-color cue (WCAG 1.4.1 — never color alone); colour is enhancement. */
+.sev-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sev-error { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid #d4a017; }
+.sev-warning { background: var(--info-bg); color: var(--info-fg); border: 1px solid #36a; }
+/* M5 5c-ii: find & replace preview. before -> after diff per (entry, field). */
+.replace-before { color: var(--muted); text-decoration: line-through; }
+.replace-after { color: #1a7f37; font-weight: 600; }
+.replace-risky { background: var(--warn-bg); }
+.replace-warn { color: var(--warn-fg); font-size: 0.9em; margin-top: 0.2rem; }
+
+.toolbar.bulk-toolbar {
+  background: #fff7ea;
+  border: 1px solid #e7c98a;
+  border-radius: 3px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.bulk-hide-hint {
+  flex-basis: 100%;
+  margin: 0.25rem 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+th.select-col, td.select-col {
+  width: 28px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+dl.entry { display: grid; grid-template-columns: 9rem 1fr; gap: 0.4rem 1rem; }
+dl.entry dt { color: var(--muted); }
+dl.entry dd { margin: 0; }
+dl.entry code { background: #f4f4f0; padding: 1px 5px; border-radius: 2px; font-size: 13px; }
+
+a.id-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+a.id-link:hover { color: var(--link, #1a5fb4); text-decoration: underline solid; }
+a.id-link:focus-visible { outline: 2px solid var(--link, #1a5fb4); outline-offset: 2px; }
+a.id-link code { background: #f4f4f0; }
+table.entries a.id-link { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+
+a.altmetric-link {
+  font-size: 12px;
+  color: #6b4a17;
+  text-decoration: none;
+  padding: 1px 6px;
+  border: 1px solid #d4b87a;
+  border-radius: 3px;
+  background: #fdf6e3;
+  white-space: nowrap;
+}
+a.altmetric-link:hover { background: #f4e8d4; text-decoration: underline; }
+a.altmetric-link:focus-visible { outline: 2px solid #6b4a17; outline-offset: 2px; }
+
+pre.url-report {
+  background: #fafaf6; border: 1px solid #ddd; border-radius: 3px;
+  padding: 1rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+  font-size: 13px; line-height: 1.45;
+}
+dl.entry pre {
+  background: #f4f4f0;
+  padding: 0.5rem;
+  border-radius: 3px;
+  font-size: 13px;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 20rem;  /* T4.9: keep the action bar in view on long values. */
+  margin: 0;
+  white-space: pre;
+}
+ol.authors { margin: 0; padding-left: 1.25rem; }
+ol.authors li { margin-bottom: 0.1rem; }
+
+/* ----- forms ----- */
+.form-row {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+.form-row > label {
+  font-weight: 600;
+  color: #444;
+  padding-top: 0.4rem;
+}
+.form-row input[type="text"],
+.form-row input[type="number"],
+.form-row textarea,
+.form-row select {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: inherit;
+  background: white;
+}
+.form-row input[type="number"] { width: 6rem; }
+.form-row textarea {
+  font: inherit;
+  resize: vertical;
+}
+.form-row textarea.mono {
+  font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: pre;
+  tab-size: 2;
+}
+.form-row .hint { color: var(--muted); font-size: 12px; margin: 0.25rem 0 0; }
+.form-row.has-error input,
+.form-row.has-error textarea { border-color: #c33; }
+.form-row .error { color: #c33; font-size: 12px; margin-top: 2px; }
+.form-row .req { color: #c33; }
+
+.form-actions {
+  margin: 1.5rem 0 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.btn-primary, .btn-secondary, .btn-danger {
+  display: inline-block;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: #2a5491; }
+.btn-secondary {
+  background: white;
+  color: var(--fg);
+}
+.btn-secondary:hover { border-color: var(--accent); }
+.btn-danger {
+  background: white;
+  color: #c33;
+  border-color: #c33;
+}
+.btn-danger:hover { background: #fff0f0; }
+
+/* Stage E / I10 (2026-05-25): destructive bulk button for /pubmed_sync
+   "All apply PubMed". Two visual states drive the inline two-step
+   confirm: default = red on light pink; armed = darker red on
+   saturated pink (clearly different so the user knows the next click
+   commits). Both pass AA contrast. */
+.btn-destructive {
+  padding: 0.35rem 0.75rem;
+  border-radius: 3px;
+  font: inherit;
+  cursor: pointer;
+  background: #fdecec;
+  color: #a02525;
+  border: 1px solid #c33;
+}
+.btn-destructive:hover:not(:disabled) { background: #fad8d8; }
+.btn-destructive:disabled { cursor: not-allowed; opacity: 0.5; }
+.btn-destructive-armed {
+  background: #f5b5b5;
+  color: #4a0e0e;
+  border-color: #7a1818;
+}
+.btn-destructive-armed:hover:not(:disabled) { background: #efa0a0; }
+
+/* author-list editor */
+.authors-editor { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.4rem; }
+.author-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.author-row .author-name { flex: 1; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; }
+.author-row label { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 13px; color: var(--muted); }
+.row-btn {
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+.row-btn:hover { border-color: var(--accent); }
+.row-btn.remove { color: #c33; border-color: #c33; }
+
+.toolbar-toggle { margin-left: 1rem; }
+
+.rebuild-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.rebuild-bar form { display: inline; }
+
+/* open_access editor */
+.oa-editor { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.4rem; }
+.oa-row { display: flex; gap: 0.75rem; align-items: center; }
+.oa-row .oa-key { min-width: 9rem; font-weight: 500; }
+.oa-row .oa-url { flex: 1; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; }
+.oa-row .oa-url:disabled { background: #f4f4f0; color: #aaa; }
+
+/* notes editor */
+.notes-editor { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.4rem; }
+.note-row {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  background: white;
+}
+.note-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.4rem; }
+.note-head .grow { flex: 1; }
+.note-type {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: inherit;
+  background: white;
+}
+.note-body textarea {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: inherit;
+  resize: vertical;
+}
+.outlets { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.3rem; }
+.outlet-row { display: flex; gap: 0.5rem; align-items: center; }
+.outlet-row .outlet-name { flex: 1; padding: 0.25rem 0.4rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; }
+.outlet-row .outlet-url { flex: 1; padding: 0.25rem 0.4rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; }
+.outlet-row label { font-size: 12px; color: var(--muted); }
+
+/* read-only views */
+ul.notes-view { padding-left: 1.2rem; margin: 0; }
+ul.notes-view > li { margin-bottom: 0.4rem; }
+ul.oa-view { padding-left: 1.2rem; margin: 0; }
+
+/* V2: simple-notes / string-list / audiences-set / dollar-prefix / search / diff */
+.simple-notes-editor { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.4rem; }
+.simple-note-row { display: flex; gap: 0.5rem; align-items: flex-start; }
+.simple-note-row .simple-note-text { flex: 1; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; resize: vertical; }
+.simple-note-row label { font-size: 12px; color: var(--muted); padding-top: 0.4rem; }
+
+.string-list-editor { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.4rem; }
+.string-list-row { display: flex; gap: 0.4rem; align-items: center; }
+.string-list-row .string-list-input { flex: 1; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; }
+
+.audiences-set { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.audience-chk { font-size: 13px; color: var(--muted); }
+.audience-chk input { vertical-align: middle; }
+
+.dollar-prefix { display: inline-block; padding: 0 0.4rem; color: var(--muted); font-weight: 600; }
+
+.search-form { margin-left: auto; }
+.search-form input { padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 3px; font: inherit; min-width: 220px; }
+
+.search-results { list-style: none; padding: 0; }
+.search-results li { padding: 0.5rem 0; border-bottom: 1px dashed var(--line); }
+
+.diff-pane { padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 3px; background: #fafaf6; max-height: 70vh; overflow: auto; white-space: pre; }
+
+/* V3: drag handle, quit, build console, qc banner, side-by-side diff */
+.drag-handle { cursor: grab; color: var(--muted); user-select: none; padding-right: 0.3rem; font-weight: 700; }
+.author-row.dragging { opacity: 0.4; }
+.author-row.drop-target { outline: 2px dashed var(--accent); outline-offset: 1px; }
+
+.quit-form { margin-left: 0.4rem; }
+.btn-quit {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  padding: 0.25rem 0.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+.btn-quit:hover { color: #b00; border-color: #b00; }
+
+.build-console {
+  margin: 0.8rem 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #1c1c1a;
+  color: #e8e8d8;
+}
+.build-console-head { display: flex; align-items: center; padding: 0.4rem 0.7rem; background: #2a2a26; color: white; }
+.build-console-head .grow { flex: 1; }
+.build-console-head .btn-secondary { background: #444; border: 0; color: white; padding: 0.2rem 0.5rem; }
+.build-console pre { margin: 0; padding: 0.6rem 0.8rem; max-height: 50vh; overflow: auto; white-space: pre-wrap; font: 12px/1.45 ui-monospace, monospace; }
+#build-console-footer { padding: 0.3rem 0.8rem 0.5rem; font-size: 12px; color: #b8b8a8; }
+
+.qc-banner { font-size: 13px; }
+.qc-banner form { margin: 0; }
+
+.disagree-banner table.disagree-table { margin-top: 0.5rem; }
+.disagree-banner table.disagree-table th { text-align: left; font-weight: 600; }
+.disagree-banner table.disagree-table td { vertical-align: top; padding: 0.3rem 0.5rem; }
+table.authors-diff { width: 100%; margin-top: 0.3rem; }
+table.authors-diff td, table.authors-diff th { padding: 0.15rem 0.4rem; font-size: 12px; }
+tr.author-mismatch td { background: #fff8dc; }
+strong.match { color: var(--accent); }
+
+ul.error-list { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+ul.error-list li { font-size: 13px; }
+
+/* V4: Style / build variants editor */
+.variant-chip { font-size: 11px; padding: 0.1rem 0.35rem; margin-right: 0.2rem; }
+.variant-chip-audience { background: #e6f0ff; color: #224488; border-color: #aac4ee; }
+.variant-chip-on { background: #e6f7e6; color: #226622; border-color: #b3d9b3; }
+.variant-chip-off { background: #ffe0e0; color: #882222; border-color: #e0a0a0; }
+.variant-chip-default { background: #f0f0e8; color: #555; border-color: #ccc; }
+
+.flag-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.6rem 0.9rem;
+  margin: 0.8rem 0;
+}
+.flag-fieldset legend { padding: 0 0.4rem; font-weight: 600; }
+.flag-label {
+  display: block;
+  padding: 0.25rem 0;
+  font-size: 14px;
+}
+.flag-label input[type="checkbox"] { margin-right: 0.5rem; vertical-align: middle; }
+
+table.impact-preview { max-width: 30rem; }
+tr.impact-total td { border-top: 2px solid var(--line); }
+
+/* V5-A: sortable columns */
+th.sortable-col { cursor: pointer; user-select: none; }
+th.sortable-col:hover { background: rgba(0,0,0,0.04); }
+.sort-indicator { color: var(--accent, #224488); font-weight: 700; }
+
+/* V5-D UX polish ----- */
+
+/* Banner-ok (green) variant + flash close + auto-dismiss fade */
+.banner-ok {
+  background: #e6f7e6;
+  color: #226622;
+  border-color: #b3d9b3;
+  border-left-color: #226622;
+}
+.flash-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+.flash-banner .banner-msg { flex: 1; }
+.flash-banner .banner-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+  opacity: 0.6;
+}
+.flash-banner .banner-close:hover { opacity: 1; }
+.flash-banner.fading { opacity: 0; transition: opacity 1s ease; }
+
+/* Sticky table headers so column labels stay visible on long lists */
+table.entries thead th {
+  position: sticky;
+  top: 0;
+  background: #f6f6f3;
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--line);
+}
+
+/* Nav wraps cleanly on narrow viewports */
+header {
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
+}
+header nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 0.2rem;
+}
+header nav a.is-current {
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom: 2px solid var(--accent, #36a);
+}
+
+/* Nav dropdown menus (More / Tools) */
+header nav details.nav-menu {
+  position: relative;
+  margin-right: 1rem;
+}
+header nav details.nav-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--accent);
+  user-select: none;
+  padding: 0;
+}
+header nav details.nav-menu > summary::-webkit-details-marker { display: none; }
+header nav details.nav-menu > summary:hover { text-decoration: underline; }
+header nav details.nav-menu.is-current > summary {
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom: 2px solid var(--accent, #36a);
+}
+header nav details.nav-menu .caret {
+  font-size: 0.7em;
+  margin-left: 0.15em;
+  vertical-align: middle;
+}
+header nav details.nav-menu[open] > summary .caret {
+  transform: rotate(180deg);
+  display: inline-block;
+}
+header nav details.nav-menu .nav-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 20;
+  min-width: 9rem;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  padding: 0.3rem 0;
+  display: flex;
+  flex-direction: column;
+}
+header nav details.nav-menu .nav-menu-panel a {
+  margin: 0;
+  padding: 0.35rem 0.9rem;
+  border-bottom: none;
+  white-space: nowrap;
+}
+header nav details.nav-menu .nav-menu-panel a:hover {
+  background: #f5f1e6;
+  text-decoration: none;
+}
+header nav details.nav-menu .nav-menu-panel a.is-current {
+  background: #fdf6e3;
+  border-bottom: none;
+  /* Non-color cue so the active dropdown item isn't indicated by background
+     colour alone (WCAG 1.4.1). The top-level nav items already use weight +
+     border; the panel items only had the pale background. */
+  font-weight: 600;
+}
+
+/* Sticky save bar at the bottom of long edit forms */
+.form-actions.sticky-save {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg, #fdfdfa);
+  padding: 0.6rem 0;
+  margin-top: 0.6rem;
+  border-top: 1px solid var(--line);
+  /* Visual detach from content above + below; matters when a nav
+     dropdown panel opens nearby (V17-D U-H5). */
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.05);
+  z-index: 5;
+}
+
+/* Field grouping fieldsets — visible structure on long forms */
+fieldset.field-group {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.6rem 0.9rem 0.2rem;
+  margin: 0.8rem 0;
+}
+fieldset.field-group legend {
+  padding: 0 0.4rem;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Drag handle larger + clearer */
+.drag-handle {
+  display: inline-block;
+  width: 1.4rem;
+  text-align: center;
+  cursor: grab;
+  color: #999;
+  background: #f4f4f0;
+  border-radius: 3px;
+}
+.drag-handle:hover {
+  background: #eaeae0;
+  color: var(--fg);
+}
+
+/* Focus ring (was missing) */
+input:focus, textarea:focus, select:focus, button:focus {
+  outline: 2px solid var(--accent, #36a);
+  outline-offset: 1px;
+}
+
+/* Sortable header default indicator (UX-MED: discoverability) */
+th.sortable-col::after {
+  content: " ↕";
+  color: #ccc;
+  font-weight: 400;
+  font-size: 0.85em;
+}
+th.sortable-col:has(.sort-indicator:not(:empty))::after { content: ""; }
+
+/* Toolbar groups (V5-D UX: separate add-actions / filters / undo) */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+.toolbar-actions, .toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.7rem;
+}
+.toolbar-filters { border-left: 1px solid var(--line); padding-left: 0.8rem; }
+.toolbar-undo { margin-left: auto; }
+.toolbar-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.btn-undo {
+  background: transparent;
+  border: 1px solid #c8a070;
+  color: #884400;
+  padding: 0.25rem 0.6rem;
+  border-radius: 3px;
+  font: inherit;
+  cursor: pointer;
+}
+.btn-undo:hover { background: #fff3e0; }
+
+/* V13: paste-press-URL row inside media-note outlets editor */
+.outlet-paste-url {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.outlet-paste-url .paste-url-input { flex: 1; }
+.outlet-paste-url .paste-url-status { min-width: 14em; }
+
+/* Stage C / I4 (2026-05-25): the .altmetric-hint wrapper class was
+   deleted along with the general-form `<p class="altmetric-hint">`
+   block in entry_edit.html. entry_view.html uses .altmetric-link
+   inline — no wrapper class needed. The in-media-note variant on
+   entry_edit uses .outlet-altmetric-explorer (defined below). */
+
+/* Stage C / I4 (2026-05-25): "View on Altmetric" link rendered
+   inside the first media note's toolbar area by
+   entry_edit.js:renderAltmetricExplorerBar. Same flex shape as
+   .outlet-paste-url / .outlet-altmetric for visual parity. */
+.outlet-altmetric-explorer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.outlet-altmetric-explorer .hint { margin: 0; }
+
+/* V13 follow-up: Altmetric API ingest in the media-note outlets editor */
+.outlet-altmetric {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border: 1px dashed #c8a070;
+  border-radius: 4px;
+  background: #fcf7ef;
+}
+.outlet-altmetric .altmetric-url-input { flex: 1; min-width: 22em; }
+.outlet-altmetric .altmetric-status { min-width: 14em; }
+.outlet-altmetric .altmetric-results { width: 100%; }
+.altmetric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.4rem 0;
+  max-height: 22em;
+  overflow-y: auto;
+  border: 1px solid #e2cba3;
+  padding: 0.4rem;
+  background: #fff;
+  border-radius: 3px;
+}
+.altmetric-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid #f0e2c8;
+  align-items: baseline;
+}
+.altmetric-row:last-child { border-bottom: none; }
+.altmetric-outlet { font-weight: 600; }
+.altmetric-headline { width: 100%; padding-left: 1.6em; font-size: 0.9em; color: #555; }
+.altmetric-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* V13-A follow-up: visual flag on mentions Altmetric did NOT link to this paper's DOI */
+.altmetric-row-flagged { background: #fff4e0; }
+.altmetric-flag {
+  display: inline-block;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  background: #8a5a1a;  /* T2.2a: WCAG AA contrast */
+  color: white;
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
+  margin-right: 0.3rem;
+  letter-spacing: 0.05em;
+}
+
+/* V13-A (deferred tracker resolution): per-outlet + bulk Resolve UI */
+.outlet-row-tracker { background: #fef4e2; border-left: 3px solid #c8a070; padding-left: 0.3rem; }
+.outlet-tracker-badge {
+  display: inline-block;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  background: #8a5a1a;  /* T2.2a: WCAG AA contrast (~5.5:1) */
+  color: white;
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+}
+.outlet-resolve {
+  background: #fff3e0;
+  border: 1px solid #c8a070;
+  color: #6b4a17;
+  font-size: 0.85em;
+  padding: 0.15em 0.5em;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.outlet-resolve:hover:not(:disabled) { background: #ffe4b3; }
+.outlet-resolve:disabled { opacity: 0.6; cursor: wait; }
+.outlet-resolve-all-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.4rem 0;
+}
+
+/* V13 finish: Trackers page + grouped-outlet preview + resolved badge */
+.tracker-pub { margin: 1.5em 0; }
+.tracker-pub h2 { font-size: 1.05rem; margin-bottom: 0.3em; }
+.trackers-table-wrap { overflow-x: auto; }
+.trackers-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+.trackers-table th,
+.trackers-table td {
+  border-bottom: 1px solid #e2e2e2;
+  padding: 0.35em 0.5em;
+  text-align: left;
+  vertical-align: top;
+}
+.trackers-table th { background: #f6f4ee; font-weight: 600; }
+.trackers-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.tracker-url {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.85em;
+  color: #555;
+}
+.outlet-resolved-badge {
+  display: inline-block;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  background: #3a7330;  /* T2.2a: WCAG AA */
+  color: white;
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+}
+/* T2.2a: all status badges darkened to meet WCAG AA at 0.7em. */
+.badge-resolved           { background: #3a7330; color: #fff; }
+.badge-failed_network     { background: #b65a3a; color: #fff; }
+.badge-failed_rate_limit  { background: #a55c1a; color: #fff; }
+.badge-failed_no_redirect { background: #555;    color: #fff; }
+.badge-unknown            { background: #666;    color: #fff; }
+.outlet-rendered {
+  background: #f8f6f0;
+  border-left: 3px solid #c8a070;
+  padding: 0.4em 0.6em;
+  margin: 0.3em 0;
+  font-size: 0.95em;
+}
+.outlet-preview-hint {
+  background: #f8f6f0;
+  border-left: 3px solid #999;
+  padding: 0.35em 0.55em;
+  margin-top: 0.4em;
+  font-size: 0.85em;
+  color: #555;
+}
+.outlet-raw-details {
+  margin-top: 0.4em;
+  font-size: 0.9em;
+}
+.outlet-raw-details > summary {
+  color: #666;
+  cursor: pointer;
+  user-select: none;
+}
+.outlet-raw-details > summary:hover { color: #333; }
+
+/* V19: PubMed sync triage page */
+.triage-entry {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e3e3e3;
+  border-radius: 4px;
+  background: #fdfdfa;
+}
+.triage-entry h3 { margin: 0 0 0.4rem 0; font-size: 1.05rem; }
+.triage-entry h3 a { color: inherit; text-decoration: none; }
+.triage-entry h3 a:hover { text-decoration: underline; }
+.triage-flags {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.92rem;
+}
+.triage-flags th, .triage-flags td {
+  border: 1px solid #e3e3e3;
+  padding: 0.35rem 0.55rem;
+  vertical-align: top;
+  text-align: left;
+}
+.triage-flags th { background: #f3f3ee; font-weight: 600; }
+.triage-yaml { background: #f7fafc; }
+.triage-pubmed { background: #fffaf3; }
+.triage-choice { white-space: nowrap; min-width: 360px; }
+.triage-choice label { margin-right: 0.65rem; font-size: 0.9rem; }
+.triage-choice .triage-reason {
+  display: block;
+  margin: 0.35rem 0;
+  width: 100%;
+  font-size: 0.9rem;
+  padding: 0.25rem 0.4rem;
+}
+.triage-choice .btn-link {
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+.triage-choice .btn-link:hover { text-decoration: underline; }
+
+/* V13-V19-D R3-M4 (2026-05-18): drop fieldset chrome (border/padding)
+   so the radios sit inline as before. The legend is hidden via
+   .visually-hidden below; the fieldset itself only exists to group
+   the radios for screen-reader announcement. */
+.triage-choice-set {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: inline;
+}
+.triage-choice-set legend {
+  padding: 0;
+  margin: 0;
+}
+
+/* Standard WCAG-recommended visually-hidden utility. Keeps text in the
+   accessibility tree but removes from visual layout. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip-to-content link: off-screen until focused, then pinned top-left so a
+   keyboard user can jump past the nav straight to <main>. Cannot reuse
+   .visually-hidden (it never un-hides, even on focus). */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 1000;
+  padding: 0.5rem 0.75rem;
+  background: #1a1a1a;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 0 0 3px 0;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+/* Sortable-header button: a real <button> for keyboard operability (Enter/Space
+   + focus + the "button" role), styled to look like the plain header text. The
+   click bubbles to the th.sortable-col handler, so the sort logic is unchanged. */
+th.sortable-col button.th-sort-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+/* V20-cleanup M5 (2026-05-18): bulk-toggle row above the triage table. */
+.triage-bulk-actions {
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+  margin: 0.5em 0 0.75em 0;
+  padding: 0.4em 0.6em;
+  background: var(--banner-info-bg, #f0f5fb);
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+.triage-bulk-status {
+  margin-left: 0.5em;
+  font-style: italic;
+}
+
+/* Advanced Typography editor (/style/typography) */
+.ty-group { border: 1px solid #ddd; border-radius: 6px; margin: 0 0 1rem; padding: 0.5rem 1rem 0.75rem; }
+.ty-group legend { font-weight: 600; padding: 0 0.4rem; color: #444; }
+.ty-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.25rem 0; }
+.ty-row > label { flex: 0 0 16rem; }
+.ty-inputs { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.ty-inputs .ty-input { width: 11rem; }
+.ty-color { width: 2rem; height: 1.6rem; padding: 0; border: 1px solid #ccc; }
+.ty-default { font-size: 11px; }
+.ty-row-error .ty-input { border-color: #cc4444; background: #fff6f6; }

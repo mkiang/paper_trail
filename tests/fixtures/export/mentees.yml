@@ -1,0 +1,10 @@
+- role: PhD Student
+  name: Alex Example
+  institution: Example University
+  date: 2023 -
+- role: Hidden Mentee
+  name: Secret Person
+  institution: Secret Org
+  date: 2021
+  hide-from:
+    - public-health

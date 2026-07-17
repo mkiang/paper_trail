@@ -1,0 +1,15 @@
+# Two clusters in oldest-first YAML order. Teaching clusters are NOT reordered
+# (render-teaching preserves YAML order), so the golden keeps Beta College first.
+# "Public JQ University" proves the institution is rendered LITERALLY: the
+# self_bold term inside it must NOT be separately bolded (the whole name is bold).
+- institution: Beta College
+  entries:
+    - role: Teaching Assistant
+      course: Advanced Examples
+      date: 2021
+- institution: Public JQ University
+  city: Boston, MA
+  entries:
+    - role: Instructor
+      course: Intro to Examples
+      date: 2024

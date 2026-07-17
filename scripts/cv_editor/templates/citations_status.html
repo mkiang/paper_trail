@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Citation counts — CV Editor{% endblock %}
+{% block content %}
+<h1>Citation counts</h1>
+<p class="muted">
+  Per-publication citation counts from Crossref's public REST API. Counts are stored in
+  <code>.cache/citation_counts.json</code> (sidecar, gitignored) and a trimmed snapshot at
+  <code>data/citation_counts.json</code> (committed). The Typst renderer reads the snapshot when
+  <code>--input show_citations=true</code> is set; only the <code>everything</code> build variant
+  currently sets that flag.
+</p>
+
+{% if status.stale %}
+<div class="banner banner-warn">
+  <strong>Snapshot is older than the sidecar cache</strong> by &gt;60s.
+  Sidecar has {{ status.sidecar_count }} fetched entries; snapshot has only {{ status.snapshot_count }}.
+  Click <em>Regenerate snapshot</em> below, then commit <code>data/citation_counts.json</code>.
+</div>
+{% endif %}
+
+<div class="toolbar">
+  <div class="toolbar-actions">
+    <form method="POST" action="{{ url_for('citations_fetch') }}" style="display:inline">
+      <button type="submit" class="btn-primary" {% if status.running %}disabled{% endif %}
+              title="Fetch missing or stale citation counts. Already-cached fresh entries are skipped.">
+        {% if status.running %}Running…{% else %}Fetch (use cache){% endif %}
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('citations_fetch') }}" style="display:inline"
+          onsubmit="return confirm('Force re-fetch every DOI from Crossref? Ignores TTLs; takes ~30 seconds.')">
+      <input type="hidden" name="force" value="1">
+      <button type="submit" class="btn-secondary" {% if status.running %}disabled{% endif %}
+              title="Ignore the 30-day TTL and re-fetch every DOI.">
+        Force re-fetch all
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('citations_snapshot') }}" style="display:inline"
+          onsubmit="return confirm('Rewrite data/citation_counts.json from the sidecar? The committed snapshot will be replaced with whatever is currently in .cache/. (Cold-clone safety: the route refuses to shrink the snapshot unless you click Force.)')"
+          title="Rewrite data/citation_counts.json from the current sidecar without contacting Crossref.">
+      <button type="submit" class="btn-secondary">Regenerate snapshot</button>
+    </form>
+    {% if status.report_url %}
+    <a class="btn-secondary" href="{{ status.report_url }}" target="_blank" rel="noopener">View raw report</a>
+    {% endif %}
+  </div>
+  <div class="toolbar-filters">
+    <span class="muted toolbar-label">
+      {% if status.sidecar_mtime %}
+        Sidecar: {{ status.sidecar_mtime }}
+      {% else %}
+        Sidecar: never fetched
+      {% endif %}
+      {% if status.snapshot_mtime %} &middot; Snapshot: {{ status.snapshot_mtime }}{% endif %}
+    </span>
+  </div>
+</div>
+
+{% if status.running %}
+<div class="banner banner-info">
+  Fetcher is running in the background. Crossref public-pool throttle limits to ~4 req/s,
+  so 100 DOIs take ~30 seconds. Refresh when ready.
+</div>
+{% endif %}
+
+<div class="grid">
+  <div class="card">
+    <div class="card-title">{{ status.has_counts }}</div>
+    <div class="card-meta">papers with counts &ge; 1 (rendered)</div>
+  </div>
+  <div class="card">
+    <div class="card-title">{{ status.fetched_zero }}</div>
+    <div class="card-meta">fetched but 0 citations (suppressed)</div>
+  </div>
+  <div class="card">
+    <div class="card-title">{{ status.failed_count }}</div>
+    <div class="card-meta">failed (see Failed DOIs below)</div>
+  </div>
+  <div class="card">
+    <div class="card-title">{{ status.never_attempted }}</div>
+    <div class="card-meta">DOIs not yet attempted</div>
+  </div>
+</div>
+
+{% if most_cited %}
+<h2>Most cited</h2>
+<table class="entries">
+  <thead><tr><th class="num-col">#</th><th>DOI</th><th class="num">Count</th></tr></thead>
+  <tbody>
+  {% for doi, count in most_cited %}
+    <tr>
+      <td class="num">{{ loop.index }}</td>
+      <td><code>{{ doi }}</code></td>
+      <td class="num">{{ count }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if failed_rows %}
+<h2>Failed DOIs</h2>
+<details>
+  <summary>{{ failed_rows | length }} entries</summary>
+  <table class="entries">
+    <thead><tr><th>DOI</th><th>Status</th><th>Attempts</th><th class="muted">Error</th></tr></thead>
+    <tbody>
+    {% for doi, e in failed_rows %}
+      <tr>
+        <td><code>{{ doi }}</code></td>
+        <td>{{ e.status }}</td>
+        <td class="num">{{ e.attempt_count }}</td>
+        <td class="muted">{{ e.error or '' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,19 @@
+- status: pending
+  agency: Future Agency
+  title: A pending grant
+  role: PI
+  date: '2026'
+- status: active
+  agency: National Examples Institute
+  title: The big example study
+  role: Principal Investigator
+  date: 01/2022 - 12/2026
+  amount: '\$1,000,000'
+  project: R01EX123
+  pi_label: MPI
+  pi: Smith
+- status: previous
+  agency: Old Funder
+  title: A finished grant
+  role: Co-Investigator
+  date: 2018 - 2020

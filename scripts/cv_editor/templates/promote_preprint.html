@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Promote preprint — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('entry_view', section='publications', idx=row.global_idx) }}">&larr; back to entry</a></p>
+
+<h1>Promote preprint to published</h1>
+<p class="muted">{{ entry.title[:120] }}</p>
+
+{% if error %}<div class="banner banner-warn">{{ error }}</div>{% endif %}
+
+{% if stage == 'ask' %}
+<form method="POST" action="{{ url_for('publication_promote', idx=row.global_idx) }}">
+  <input type="hidden" name="action" value="preview">
+  <p class="hint">Paste the published DOI or PMID. The app fetches canonical metadata and shows a diff before applying.</p>
+  <div class="form-row">
+    <label>Published DOI / PMID</label>
+    <input type="text" name="ident" placeholder="10.9999/nejm.2018.3972 or 12345678" autofocus>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn-primary">Fetch canonical →</button>
+    <a href="{{ url_for('entry_view', section='publications', idx=row.global_idx) }}" class="btn-secondary" data-skip-dirty>Cancel</a>
+  </div>
+</form>
+
+{% elif stage == 'preview' %}
+{% if diff.warn_low_overlap %}
+<div class="banner banner-warn">
+  <strong>Low title overlap ({{ '%.0f' % (diff.title_overlap * 100) }}%).</strong>
+  The published title doesn't share many tokens with the preprint title. Verify you pasted the right ID before applying.
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('publication_promote', idx=row.global_idx) }}" id="promote-form">
+  <input type="hidden" name="action" value="apply">
+  <input type="hidden" name="ident" value="{{ request.form.get('ident') }}">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+
+  <h2>Preservation matrix</h2>
+
+  <h3>Replaces ({{ diff.replaces | length }} {{ diff.replaces|length|pluralize("field", "fields") }})</h3>
+  {% if diff.replaces %}
+  <table class="entries">
+    <thead><tr><th>Field</th><th>Preprint</th><th>Published</th></tr></thead>
+    <tbody>
+      {% for field, d in diff.replaces.items() %}
+      <tr>
+        <td><code>{{ field }}</code></td>
+        <td class="muted">{{ d.old or '(empty)' }}</td>
+        <td><strong>{{ d.new }}</strong></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No bibliographic fields differ.</p>{% endif %}
+
+  <h3>Authors — manual review required</h3>
+  <p class="hint">Authors are the most-changed field across preprint→published transitions. Choose how to handle them:</p>
+  <div class="form-row">
+    <label>
+      <input type="radio" name="author_choice" value="canonical" checked>
+      Use the published author list ({{ diff.authors_review.new | length }} authors)
+    </label>
+  </div>
+  <div class="form-row">
+    <label>
+      <input type="radio" name="author_choice" value="preprint">
+      Keep the preprint author list ({{ diff.authors_review.old | length }} authors)
+    </label>
+  </div>
+
+  <details>
+    <summary>Show side-by-side</summary>
+    <table class="entries">
+      <thead><tr><th>#</th><th>Preprint</th><th>Published</th></tr></thead>
+      <tbody>
+        {% for i in range([diff.authors_review.old | length, diff.authors_review.new | length] | max) %}
+        <tr>
+          <td>{{ i + 1 }}</td>
+          <td>{{ diff.authors_review.old[i].name if i < diff.authors_review.old | length else '—' }}</td>
+          <td>{{ diff.authors_review.new[i].name if i < diff.authors_review.new | length else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+
+  <h3>Preserved (untouched)</h3>
+  {% if diff.preserves %}
+  <ul>{% for f in diff.preserves %}<li><code>{{ f }}</code></li>{% endfor %}</ul>
+  {% else %}<p class="muted">Nothing to preserve.</p>{% endif %}
+
+  <h3>Notes</h3>
+  <p>
+    <label>
+      <input type="checkbox" name="keep_notes" checked>
+      Keep all preprint notes ({{ existing_form.notes | length }} {{ existing_form.notes|length|pluralize("note", "notes") }})
+    </label>
+  </p>
+
+  <h3>Subsection</h3>
+  <p class="hint">Move the entry from its preprint subsection to:</p>
+  {# V13-V19-D R3-L2 (2026-05-18): mark the entry's CURRENT subsection
+     in the dropdown so picking it doesn't silently no-op the promotion.
+     `row.subsection` is the preprint's current subsection — if the user
+     re-selects it, the entry stays put. #}
+  <select name="target_subsection">
+    {% for s in subsections %}
+    <option value="{{ s }}" {% if s == target_subsection %}selected{% endif %}>{{ s }}{% if s == row.subsection %} (current — won't move){% endif %}</option>
+    {% endfor %}
+  </select>
+
+  <div class="form-actions">
+    <button type="submit" class="btn-primary">Apply promotion</button>
+    <a href="{{ url_for('entry_view', section='publications', idx=row.global_idx) }}" class="btn-secondary" data-skip-dirty>Cancel</a>
+  </div>
+</form>
+<script src="{{ url_for('static', filename='form_dirty_guard.js') }}"></script>
+<script>FormDirtyGuard.attach("promote-form");</script>
+{% endif %}
+{% endblock %}

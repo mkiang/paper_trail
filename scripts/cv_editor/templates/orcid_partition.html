@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}ORCID discovery — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('publication_import') }}">&larr; back to import</a></p>
+<h1>ORCID discovery <span class="muted">({{ orcid_id }})</span></h1>
+
+<p class="hint">{{ n_discovered }} {{ n_discovered|pluralize("work", "works") }} discovered.
+Importing a row runs the same PubMed/Crossref enrich + side-by-side review as the
+DOI/PMID tab — ORCID's own metadata is never written to YAML. Nothing has changed yet.</p>
+
+<h2>New <span class="muted">({{ new | length }})</span></h2>
+{% if new %}
+<table class="entries">
+  <thead><tr><th>ID</th><th>Title</th><th></th></tr></thead>
+  <tbody>
+    {% for r in new %}
+    <tr>
+      <td>
+        {% if r.doi %}<code>DOI {{ r.doi[:40] }}</code>{% endif %}
+        {% if r.pmid %}<code>PMID {{ r.pmid }}</code>{% endif %}
+      </td>
+      <td>{{ (r.title or '(no title from ORCID)')[:90] }}</td>
+      <td>
+        {# DOI-first ident (staged_list.html is PMID-first): ORCID's normalized
+           DOI is reliable + not every ORCID work has a PMID. Harmless either way —
+           _stage_from_id enriches from DOI or PMID and back-fills the other id. #}
+        <form method="POST" action="{{ url_for('publication_import') }}" style="display:inline">
+          <input type="hidden" name="source" value="doi_pmid">
+          <input type="hidden" name="ident" value="{{ r.doi or r.pmid or '' }}">
+          <button type="submit" class="btn-primary">Import &rarr;</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Nothing new — every DOI/PMID ORCID lists is already in your CV.</p>
+{% endif %}
+
+<h2>Already in CV <span class="muted">({{ in_cv | length }})</span></h2>
+{% if in_cv %}
+<table class="entries">
+  <thead><tr><th>ID</th><th>Title</th></tr></thead>
+  <tbody>
+    {% for r in in_cv %}
+    <tr>
+      <td>
+        {% if r.doi %}<code>DOI {{ r.doi[:40] }}</code>{% endif %}
+        {% if r.pmid %}<code>PMID {{ r.pmid }}</code>{% endif %}
+      </td>
+      <td>{{ (r.title or '(no title from ORCID)')[:90] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">None of the discovered works are in your CV yet.</p>
+{% endif %}
+
+<h2>No usable ID <span class="muted">({{ no_id | length }})</span></h2>
+<p class="hint">ORCID lists these without a DOI or PMID, so they can't be auto-enriched.
+Add them manually if they belong in the CV.</p>
+{% if no_id %}
+<table class="entries">
+  <thead><tr><th>Title</th><th></th></tr></thead>
+  <tbody>
+    {% for r in no_id %}
+    <tr>
+      <td>{{ (r.title or '(no title from ORCID)')[:90] }}</td>
+      <td><a href="{{ url_for('entry_new', section='publications') }}">Add manually &rarr;</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Every discovered work carried a DOI or PMID.</p>
+{% endif %}
+{% endblock %}

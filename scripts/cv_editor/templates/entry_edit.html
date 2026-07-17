@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'new' %}New {{ section_label }}{% else %}Edit{% if global_idx is not none %} #{{ global_idx + 1 }}{% endif %}{% endif %} — CV Editor{% endblock %}
+{% block content %}
+{% if section_key == 'meta' %}
+<p><a href="{{ url_for('meta_view') }}">&larr; back to Meta</a></p>
+{% else %}
+<p><a href="{{ url_for('section_list', section=section_key) }}">&larr; back to {{ section_label }}</a></p>
+{% endif %}
+
+<h1>
+  {% if mode == 'new' %}New {{ section_label }}{% else %}Edit{% if global_idx is not none %} #{{ global_idx + 1 }}{% endif %}{% endif %}
+</h1>
+
+{% if errors %}
+<div class="banner banner-warn">
+  <strong>Could not save.</strong> Your edits are preserved below — fix these and resubmit:
+  <ul class="error-list">
+    {% for fname, msg in errors.items() %}
+    <li><a href="#f-{{ fname }}"><code>{{ fname }}</code></a>: {{ msg }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if extra_warning %}
+<div class="banner banner-warn">{{ extra_warning }}</div>
+{% endif %}
+
+{% if needs_contribution %}
+<div class="banner banner-warn">
+  <strong>Missing contribution note.</strong> You are a middle author on this paper. Add a <code>contributions</code> note describing your role so reviewers understand your involvement. Non-blocking — save anyway if you intend to come back to it.
+</div>
+{% endif %}
+
+{% if disagreements %}
+<div class="banner banner-info disagree-banner">
+  <strong>Pre-filled from {{ staged_source or 'canonical' }}.</strong>
+  Canonical source disagreed with the pasted citation on
+  <strong>{{ disagreements | length }}</strong> {{ disagreements|length|pluralize("field", "fields") }}.
+  <details open>
+    <summary>review side-by-side</summary>
+    <table class="entries disagree-table">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Parsed (from {{ staged_source or 'paste' }})</th>
+          <th>Canonical (auto-filled)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fld, d in disagreements.items() %}
+        {% if fld == 'authors' %}
+        <tr class="disagree-authors">
+          <td><code>{{ fld }}</code></td>
+          <td colspan="2">
+            <strong>Authors: per-position diff (review before saving):</strong>
+            <table class="authors-diff">
+              <thead><tr><th>#</th><th>Parsed</th><th>Canonical</th></tr></thead>
+              <tbody>
+                {% set max_n = [d.parsed | length, d.canonical | length] | max %}
+                {% for i in range(max_n) %}
+                {% set p_name = (d.parsed[i].name if d.parsed[i] is mapping else d.parsed[i]) if i < d.parsed | length else '' %}
+                {% set c_name = d.canonical[i].name if i < d.canonical | length else '' %}
+                <tr {% if p_name != c_name %}class="author-mismatch"{% endif %}>
+                  <td>{{ i + 1 }}</td>
+                  <td>{{ p_name or '—' }}</td>
+                  <td>{{ c_name or '—' }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td><code>{{ fld }}</code></td>
+          <td class="muted">{{ d.parsed if d.parsed not in (none, '', []) else '—' }}</td>
+          <td><strong>{{ d.canonical }}</strong></td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">The form below is pre-filled with the canonical values. Edit any field by hand if you disagree.</p>
+  </details>
+</div>
+{% endif %}
+
+{% set save_endpoint = 'meta_save' if section_key == 'meta' else 'entry_save' %}
+{% set save_kwargs = {} if section_key == 'meta' else {'section': section_key} %}
+<form method="POST" action="{{ url_for(save_endpoint, **save_kwargs) }}" id="edit-form" autocomplete="off">
+  <noscript>
+    <div class="banner banner-warn" role="alert">This editor requires JavaScript. With it disabled the rich fields (authors, notes, audiences, etc.) cannot be edited and <strong>saving is blocked</strong> to protect your existing data.</div>
+  </noscript>
+  <input type="hidden" name="mode" value="{{ mode }}">
+  {% if global_idx is not none %}<input type="hidden" name="global_idx" value="{{ global_idx }}">{% endif %}
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+  {# Set to '1' by entry_edit.js ONLY after every editor mounts. The save route
+     rejects the save when this is empty (JS failed to load / threw mid-mount),
+     so an empty JS-driven field can never silently wipe existing data. #}
+  <input type="hidden" name="js_mounted" id="js-mounted" value="">
+
+  {# ---------- Target picker (subsection / institution / city) ---------- #}
+  {% if structure == 'list_of_subsections' or structure == 'subsections_of_clusters' %}
+  <div class="form-row">
+    <label>Subsection</label>
+    <select name="subsection">
+      {% for s in subsections %}
+      <option value="{{ s }}" {% if s == target.subsection %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if structure == 'clusters' or structure == 'subsections_of_clusters' %}
+  <div class="form-row">
+    <label>Institution <span class="req">*</span></label>
+    <div>
+      <input type="text" name="cluster_institution" value="{{ target.institution or '' }}" list="institutions-datalist">
+      <datalist id="institutions-datalist">
+        {% for t in existing_targets %}<option value="{{ t.institution }}">{% endfor %}
+      </datalist>
+      <p class="hint">Type a new institution to create a new cluster, or pick an existing one.</p>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>City</label>
+    <input type="text" name="cluster_city" value="{{ target.city or '' }}" placeholder="City, State or City, COUNTRY">
+  </div>
+  {% endif %}
+
+  {# ---------- Field loop ---------- #}
+  {% for f in fields %}
+    {% set err = errors.get(f.name) %}
+    <div class="form-row {% if err %}has-error{% endif %}">
+      <label for="f-{{ f.name }}">{{ f.label or f.name }}{% if f.required %} <span class="req">*</span>{% endif %}</label>
+
+      <div>
+      {# V17-D U-M7: outer span#f-<name> gives the error-jump-link an
+         anchor target. JSON-field editors don't put the f-<name> id on
+         a real <input> so the link used to scroll to nothing. #}
+      {% if f.type == 'author_list' %}
+        <span id="f-{{ f.name }}"></span>
+        <div id="authors-editor" class="authors-editor"></div>
+        <button type="button" class="btn-secondary" id="author-add">+ Add author</button>
+        <p class="hint">Reorder with the up/down buttons or Alt+&uarr; / Alt+&darr; while focused in a name input. Co-first / co-senior / group-authorship add the auto-superscript and footnote sentence in the renderer.</p>
+        <input type="hidden" name="authors_json" id="authors-json" value="">
+
+      {% elif f.type == 'open_access_dict' %}
+        <span id="f-{{ f.name }}"></span>
+        <div id="oa-editor" class="oa-editor"></div>
+        <p class="hint">For each component: check the box to mark it openly accessible. Optionally add a URL; leave blank to store as <code>true</code> (no specific URL).</p>
+        <input type="hidden" name="open_access_json" id="open_access-json" value="">
+
+      {% elif f.type == 'typed_notes' %}
+        <span id="f-{{ f.name }}"></span>
+        {# Stage C / I4 (2026-05-25): the "View on Altmetric" link moved
+           from this general-form position to inside the first media note
+           (rendered by entry_edit.js:renderAltmetricExplorerBar). It now
+           appears where it's actually relevant — alongside the outlets
+           the user is collecting. The entry_view detail page button
+           stays untouched. #}
+        <div id="notes-editor" class="notes-editor"></div>
+        <button type="button" class="btn-secondary" id="note-add">+ Add note</button>
+        <p class="hint">Notes render as indented sub-bullets under the publication. Types: <code>commentary</code> / <code>letter</code> / <code>response</code> (citation field), <code>media</code> (list of outlets with optional URL), <code>editorial</code> / <code>contributions</code> / <code>note</code> (free text). "Hidden" gates the note behind <code>--input show_highlighted=true</code>.</p>
+        <input type="hidden" name="notes_json" id="notes-json" value="">
+
+      {% elif f.type == 'simple_notes' %}
+        <span id="f-{{ f.name }}"></span>
+        <div class="simple-notes-editor" data-field="{{ f.name }}"></div>
+        <button type="button" class="btn-secondary" data-add-simple-note="{{ f.name }}">+ Add note</button>
+        <p class="hint">Each note renders as an indented sub-bullet below the entry. "Hidden" gates the note behind <code>--input show_highlighted=true</code>.</p>
+        <input type="hidden" name="{{ f.name }}_json" id="{{ f.name }}-json" value="">
+
+      {% elif f.type == 'string_list' %}
+        <span id="f-{{ f.name }}"></span>
+        <div class="string-list-editor" data-field="{{ f.name }}"></div>
+        <button type="button" class="btn-secondary" data-add-string="{{ f.name }}">+ Add</button>
+        {% if f.placeholder %}<p class="hint">{{ f.placeholder }}</p>{% endif %}
+        <input type="hidden" name="{{ f.name }}_json" id="{{ f.name }}-json" value="">
+
+      {% elif f.type == 'audiences_set' %}
+        <span id="f-{{ f.name }}"></span>
+        <div class="audiences-set" data-field="{{ f.name }}">
+          {% for c in f.choices %}
+          <label class="audience-chk"><input type="checkbox" data-audience="{{ c }}" {% if c in (list_field_data.get(f.name) or []) %}checked{% endif %}> {{ c }}</label>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="{{ f.name }}_json" id="{{ f.name }}-json" value="">
+
+      {% elif f.type == 'select' %}
+        <select id="f-{{ f.name }}" name="{{ f.name }}">
+          {% for c in f.choices %}
+          <option value="{{ c }}" {% if (form_data.get(f.name) if form_data.get(f.name) is not none else entry.get(f.name)) | string == c | string %}selected{% endif %}>{% if c == '' %}(default){% else %}{{ c }}{% endif %}</option>
+          {% endfor %}
+        </select>
+        {% if f.placeholder %}<p class="hint">{{ f.placeholder }}</p>{% endif %}
+
+      {% elif f.type == 'grant_amount' %}
+        <span class="dollar-prefix">$</span>
+        <input type="text" id="f-{{ f.name }}" name="{{ f.name }}"
+               value="{{ amount_display_for[f.name] }}"
+               placeholder="166,280 total costs per year">
+        {% if f.placeholder %}<p class="hint">{{ f.placeholder }}</p>{% endif %}
+
+      {% elif f.type == 'bool' %}
+        <input type="checkbox" id="f-{{ f.name }}" name="{{ f.name }}" {% if entry.get(f.name) %}checked{% endif %}>
+
+      {% elif f.type == 'textarea' %}
+        <textarea id="f-{{ f.name }}" name="{{ f.name }}" rows="2"
+                  {% if f.placeholder %}placeholder="{{ f.placeholder }}"{% endif %}>{{ entry.get(f.name) or '' }}</textarea>
+        {% if f.placeholder %}<p class="hint">{{ f.placeholder }}</p>{% endif %}
+
+      {% elif f.type == 'int' %}
+        <input type="number" id="f-{{ f.name }}" name="{{ f.name }}"
+               {% if f.min is defined %}min="{{ f.min }}"{% endif %}
+               {% if f.max is defined %}max="{{ f.max }}"{% endif %}
+               {% if f.placeholder %}placeholder="{{ f.placeholder }}"{% endif %}
+               value="{{ entry.get(f.name) if entry.get(f.name) is not none else '' }}">
+
+      {% else %}
+        <input type="text" id="f-{{ f.name }}" name="{{ f.name }}"
+               {% if f.placeholder %}placeholder="{{ f.placeholder }}"{% endif %}
+               value="{{ entry.get(f.name) or '' }}">
+        {% if f.placeholder and f.name in ('doi', 'pmid', 'pmcid', 'epub_date', 'pages', 'date') %}
+        <p class="hint">{{ f.placeholder }}</p>
+        {% endif %}
+      {% endif %}
+
+      {% if err %}<div class="error">{{ err }}</div>{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  <div class="form-actions sticky-save">
+    <button type="submit" class="btn-primary" title="Save (Cmd+S / Ctrl+S)">Save</button>
+    {% if section_key == 'meta' %}
+    <a href="{{ url_for('meta_view') }}" class="btn-secondary" data-skip-dirty>Cancel</a>
+    {% else %}
+    <a href="{{ url_for('section_list', section=section_key) }}" class="btn-secondary" data-skip-dirty>Cancel</a>
+    {% endif %}
+    {% if mode == 'edit' and global_idx is not none and section_key != 'meta' %}
+    <span style="flex: 1"></span>
+    <button type="submit" form="delete-form" class="btn-danger" onclick="return confirm('Delete this entry? A backup is kept.')">Delete</button>
+    {% endif %}
+  </div>
+</form>
+
+{% if mode == 'edit' and global_idx is not none and section_key != 'meta' %}
+<form id="delete-form" method="POST" action="{{ url_for('entry_delete', section=section_key, idx=global_idx) }}" style="display:none">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+</form>
+{% endif %}
+
+<script id="entry-edit-data" type="application/json">
+{
+  "section_key": {{ section_key | tojson }},
+  "primary_note_types": {{ primary_note_types | tojson }},
+  "all_note_types": {{ all_note_types | tojson }},
+  "note_type_label": {{ note_type_label | tojson }},
+  "tracker_hosts": {{ tracker_hosts | tojson }},
+  "altmetric_enabled": {{ capabilities.altmetric | tojson }},
+  "author_forms": {{ (author_forms or []) | tojson }},
+  "open_access_form": {{ (open_access_form or {}) | tojson }},
+  "notes_form": {{ (notes_form or []) | tojson }},
+  "simple_notes_form": {{ (simple_notes_form or []) | tojson }},
+  "list_field_data": {{ (list_field_data or {}) | tojson }},
+  "routes": {
+    {% if capabilities.altmetric %}"altmetric_resolve": "{{ url_for('publications_altmetric_resolve') }}",
+    {% endif %}"fetch_title": "{{ url_for('publications_fetch_title') }}"
+  }
+}
+</script>
+<script src="{{ url_for('static', filename='list_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='entry_edit.js') }}"></script>
+<script src="{{ url_for('static', filename='form_dirty_guard.js') }}"></script>
+<script>FormDirtyGuard.attach("edit-form");</script>
+{% endblock %}

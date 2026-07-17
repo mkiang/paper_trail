@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Style / build variants — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('index') }}">&larr; back to sections</a></p>
+<h1>Style / build variants <span class="muted">({{ variants | length }})</span></h1>
+<p class="hint">Each variant produces one PDF in <code>output/&lt;filename&gt;.pdf</code> via <code>./build.sh</code>. The <em>cv</em> variant (empty inputs) is the canonical CV; everything else applies the listed flags. Use this screen to add a new variant (e.g., a slimmed-down version for one application) or tweak the existing ones.</p>
+
+<div class="toolbar">
+  <a href="{{ url_for('style_new') }}" class="btn-primary">+ New variant</a>
+  {% if capabilities.typography %}<a href="{{ url_for('style_typography') }}" class="btn-secondary">Typography (fonts, spacing, colours)</a>{% endif %}
+  <form method="POST" action="{{ url_for('rebuild') }}" style="display:inline">
+    <input type="hidden" name="mode" value="full">
+    <button type="submit" class="btn-secondary">Build all variants (./build.sh)</button>
+  </form>
+</div>
+
+<table class="entries">
+  <thead><tr><th>#</th><th>Filename</th><th>Flags</th><th></th></tr></thead>
+  <tbody>
+    {% for v in variants %}
+    <tr>
+      <td class="num">{{ loop.index }}</td>
+      <td><a href="{{ v.edit_url }}"><code>{{ v.filename }}.pdf</code></a></td>
+      <td>
+        {% for c in v.chips %}
+        <span class="badge variant-chip variant-chip-{{ c.kind }}">{{ c.label }}</span>
+        {% endfor %}
+      </td>
+      <td>
+        <a href="{{ v.edit_url }}" class="btn-secondary">Edit</a>
+        <button type="button" class="btn-secondary" data-build-variant="{{ v.idx }}" data-filename="{{ v.filename }}">Build this</button>
+        <form method="POST" action="{{ url_for('style_duplicate', idx=v.idx) }}" style="display:inline">
+          <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+          <button type="submit" class="btn-secondary">Duplicate</button>
+        </form>
+        <form method="POST" action="{{ url_for('style_delete', idx=v.idx) }}" style="display:inline" onsubmit="return confirm('Delete variant {{ v.filename }}? A backup of meta.yml is kept.')">
+          <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+          <button type="submit" class="btn-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "_build_console.html" %}
+
+<script src="{{ url_for('static', filename='build_console.js') }}"></script>
+<script>
+BuildConsole.attach({
+  trigger: '[data-build-variant]',
+  urlFromBtn: btn => `/style/${btn.dataset.buildVariant}/build/stream`,
+  bodyFromBtn: () => null,
+  consoleEl: document.getElementById('build-console'),
+  bodyEl:    document.getElementById('build-console-body'),
+  footerEl:  document.getElementById('build-console-footer'),
+  closeBtn:  document.getElementById('build-console-close'),
+  labelFromBtn: btn => btn.dataset.filename,
+});
+</script>
+{% endblock %}

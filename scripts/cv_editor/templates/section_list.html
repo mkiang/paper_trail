@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% block title %}{{ section_label }} — CV Editor{% endblock %}
+{% block content %}
+<h1>{{ section_label }} <span class="muted">({{ rows | length }} entries)</span></h1>
+
+{% if n_needs_contribution > 0 %}
+<div class="banner banner-warn">
+  <strong>{{ n_needs_contribution }} middle-author {{ n_needs_contribution|pluralize("paper", "papers") }}</strong> with no <code>contributions</code> note. Look for the
+  <span class="badge contrib-badge">contrib?</span> tag in the rows below.
+</div>
+{% endif %}
+
+{% if section_key == 'publications' and qc_status %}
+<div class="banner banner-info qc-banner">
+  {% if qc_status.running %}
+    <span>QC pass running in background…</span>
+  {% elif qc_status.fresh %}
+    <span>QC report fresh as of {{ qc_status.mtime }} — <a href="{{ qc_status.url }}">view qc/report.md</a></span>
+  {% else %}
+    <span>QC report is older than the YAML. <form method="POST" action="{{ url_for('qc_run') }}" style="display:inline"><button type="submit" class="btn-secondary">Run QC pass</button></form></span>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="toolbar">
+  <div class="toolbar-actions">
+    {% if section_key == 'publications' %}
+    <a href="{{ url_for('publication_import') }}" class="btn-primary">+ Add publication</a>
+    <a href="{{ url_for('publication_rename_author') }}" class="btn-secondary">Rename author…</a>
+    {% endif %}
+    <a href="{{ url_for('entry_new', section=section_key) }}" class="btn-{{ 'secondary' if section_key == 'publications' else 'primary' }}">{% if section_key == 'publications' %}Manual entry{% else %}+ Add entry{% endif %}</a>
+    <a href="{{ url_for('entry_backups', section=section_key) }}" class="btn-secondary">Backups</a>
+  </div>
+  <div class="toolbar-filters">
+    <span class="muted toolbar-label">Filter:</span>
+    <label class="toolbar-toggle"><input type="checkbox" id="show-hidden"{% if show_hidden_default %} checked{% endif %}> Show hidden{% if show_hidden_default %} <span class="muted">(default for this section)</span>{% endif %}</label>
+    {% if section_key == 'publications' %}
+    <label class="toolbar-toggle"><input type="checkbox" id="needs-contrib-only"> Needs contribution note only</label>
+    <label class="toolbar-toggle"><input type="checkbox" id="show-citation-counts"> Show Cited-by</label>
+    <label class="toolbar-toggle"><input type="checkbox" id="show-media-counts"> Show Media (shown / total)</label>
+    {% endif %}
+    {% if subsections %}
+    <select id="filter-subsection">
+      <option value="">All subsections</option>
+      {% for sub in subsections %}<option>{{ sub }}</option>{% endfor %}
+    </select>
+    {% endif %}
+    {% if institutions and structure in ('clusters', 'subsections_of_clusters') %}
+    <select id="filter-institution">
+      <option value="">All institutions</option>
+      {% for inst in institutions %}<option>{{ inst }}</option>{% endfor %}
+    </select>
+    {% endif %}
+  </div>
+  <form method="POST" action="{{ url_for('entry_undo', section=section_key) }}" class="toolbar-undo" onsubmit="return confirm('Restore the most recent backup? This will replace the current YAML.')">
+    <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+    <button type="submit" class="btn-undo" title="Restore the most recent backup">Undo last save</button>
+  </form>
+</div>
+
+{% if section_key == 'publications' %}
+<form method="POST" action="{{ url_for('publication_bulk') }}" id="bulk-form"
+      onsubmit="return confirmBulk();">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+  <div class="toolbar bulk-toolbar" id="bulk-toolbar" hidden>
+    <span class="muted toolbar-label">
+      <strong id="bulk-count">0</strong> selected · Apply:
+    </span>
+    <select name="bulk_action" id="bulk-action" required>
+      <option value="">Pick an action…</option>
+      <option value="set_hidden">Mark as hidden</option>
+      <option value="unset_hidden">Un-hide (show)</option>
+      <option value="move_subsection">Move to subsection…</option>
+    </select>
+    <select name="target_subsection" id="bulk-target" hidden>
+      {% for sub in subsections %}<option value="{{ sub }}">{{ sub }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn-primary">Apply to selected</button>
+    <button type="button" class="btn-secondary" id="bulk-clear">Clear selection</button>
+    <p class="hint bulk-hide-hint">
+      "Hidden" entries are dropped from <code>cv.pdf</code> (and most other build variants), but the <code>everything.pdf</code> build intentionally renders them. Toggle <em>Show hidden</em> above to see them in this table.
+    </p>
+  </div>
+{% endif %}
+
+<table class="entries sortable"{% if section_key == 'publications' %} data-num-reverse="1"{% endif %}>
+  <thead>
+    <tr>
+      {% if section_key == 'publications' %}
+      <th class="select-col"><input type="checkbox" id="select-all" title="Select all visible"></th>
+      {% endif %}
+      <th class="num-col">#</th>
+      {% for col in list_columns %}
+      <th class="sortable-col" data-col="{{ col }}" data-kind="text" aria-sort="none">
+        <button type="button" class="th-sort-btn">{{ col.replace('_', ' ').title() }}<span class="sort-indicator"></span></button>
+      </th>
+      {% endfor %}
+      {% if section_key == 'publications' %}
+      <th class="sortable-col col-citation-count-head" data-col="citation_count" data-kind="text" aria-sort="none" hidden>
+        <button type="button" class="th-sort-btn">Cited by<span class="sort-indicator"></span></button>
+      </th>
+      <th class="sortable-col col-media-count-head" data-col="media_count" data-kind="text" aria-sort="none" hidden>
+        <button type="button" class="th-sort-btn">Media<span class="sort-indicator"></span></button>
+      </th>
+      {% endif %}
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr class="entry-row {% if r.highlighted %}is-hidden{% endif %} {% if r.needs_contribution %}needs-contrib{% endif %}"
+        data-subsection="{{ r.subsection }}"
+        data-institution="{{ r.institution }}"
+        data-needs-contrib="{{ '1' if r.needs_contribution else '0' }}"
+        {% if r.highlighted %}hidden{% endif %}>
+      {% if section_key == 'publications' %}
+      <td class="select-col"><input type="checkbox" class="row-select" name="selected" value="{{ r.global_idx }}"></td>
+      {% endif %}
+      {# 2026-05-26: publications count DOWN (newest=highest) so the # column
+         roughly matches the CV PDF convention where each subsection numbers
+         oldest=1 ascending. Other sections keep ascending top-down. #}
+      <td class="num">{% if section_key == 'publications' %}{{ rows|length - loop.index0 }}{% else %}{{ loop.index }}{% endif %}</td>
+      {% for col in list_columns %}
+      <td class="col-{{ col }}{% if col in ('subsection', 'institution') %} muted{% endif %}"
+          data-sort-value="{{ r.sort_values[col] if r.sort_values and col in r.sort_values else r[col] }}">
+        {% if col == 'title' or col == 'course' or col == 'project' %}
+        <a href="{{ r.view_url }}">{{ r[col] }}</a>
+        {% elif col == 'role' or col == 'award' or col == 'name' %}
+          {# 2026-05-26: dropped the `loop.index == 1` guard so these
+             columns always link to the entry view regardless of
+             column position. Sections like mentees/service/honors/
+             appointments have `date` at column 1; without this fix,
+             rows on /<section>/ had zero clickable links and the
+             section was effectively read-only despite the routes
+             being wired. Multiple links per row to the same view_url
+             (e.g., publications: title AND role) are benign. #}
+          <a href="{{ r.view_url }}">{{ r[col] }}</a>
+        {% elif col in ('doi', 'preprint_doi', 'pmid', 'pmcid') and r[col] %}
+          {% set _id_link = r[col]|id_url(col) %}
+          {% if _id_link %}<a class="id-link" href="{{ _id_link }}" target="_blank" rel="noopener noreferrer">{{ r[col] }}</a>{% else %}{{ r[col] }}{% endif %}
+        {% elif col == 'year' and r.sort_values and r.sort_values.year and r.sort_values.year[4:6] != '00' %}
+          {# V17-D U-H3: surface the month used for sub-sort so within-year ordering is legible. #}
+          {{ r[col] }}<span class="muted sort-sub" title="Sorted by year, then month/day"> · {{ r.sort_values.year[4:6] }}</span>
+        {% elif col == 'date' and section_key == 'presentations' and r.sort_values and r.sort_values.date and r.sort_values.date[4:6] != '00' %}
+          {# Match the publications 'year · MM' display: talks always use a single MM/YYYY, so render year prominently with muted month. #}
+          {{ r.sort_values.date[0:4] }}<span class="muted sort-sub" title="Sorted by year, then month"> · {{ r.sort_values.date[4:6] }}</span>
+        {% else %}
+        {{ r[col] }}
+        {% endif %}
+      </td>
+      {% endfor %}
+      {% if section_key == 'publications' %}
+      <td class="num col-citation-count" data-sort-value="{{ r.citation_count if r.citation_count is not none else -1 }}" hidden>
+        {% if r.citation_count is not none %}{{ r.citation_count }}{% else %}—{% endif %}
+      </td>
+      {# 2026-05-26: media count column. sort_value = total (so sort-desc
+         floats high-coverage papers); display = "shown / total". Zero
+         total renders as em-dash so the eye skips it. #}
+      <td class="num col-media-count" data-sort-value="{{ r.media_total_count }}" hidden>
+        {% if r.media_total_count > 0 %}{{ r.media_shown_count }} / {{ r.media_total_count }}{% else %}—{% endif %}
+      </td>
+      {% endif %}
+      <td>
+        {% if r.highlighted %}<span class="badge">hidden</span>{% endif %}
+        {% if r.future_status == "future_start" %}<span class="badge future-badge" title="{{ r.future_note }}">future</span>{% elif r.future_status == "future_end" %}<span class="badge future-badge" title="{{ r.future_note }}">ongoing</span>{% endif %}
+        {% if r.needs_contribution %}<span class="badge contrib-badge" title="Middle author with no contributions note">contrib?</span>{% endif %}
+        {% if not (r.title or r.course or r.project or r.role or r.award or r.name) %}
+        <a href="{{ r.view_url }}">view</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if section_key == 'publications' %}
+</form>
+{% endif %}
+
+<script>
+(function () {
+  const showHidden = document.getElementById('show-hidden');
+  const needsContribOnly = document.getElementById('needs-contrib-only');
+  const filterSub = document.getElementById('filter-subsection');
+  const filterInst = document.getElementById('filter-institution');
+  const rows = document.querySelectorAll('tr.entry-row');
+
+  function applyFilters() {
+    const sub = filterSub ? filterSub.value : '';
+    const inst = filterInst ? filterInst.value : '';
+    const showH = showHidden && showHidden.checked;
+    const needsOnly = needsContribOnly && needsContribOnly.checked;
+    rows.forEach(r => {
+      const isHidden = r.classList.contains('is-hidden');
+      const matchSub = !sub || r.dataset.subsection === sub;
+      const matchInst = !inst || r.dataset.institution === inst;
+      const matchNeeds = !needsOnly || r.dataset.needsContrib === '1';
+      r.hidden = (!showH && isHidden) || !matchSub || !matchInst || !matchNeeds;
+    });
+  }
+  if (showHidden) showHidden.addEventListener('change', applyFilters);
+  if (needsContribOnly) needsContribOnly.addEventListener('change', applyFilters);
+  // Rows where r.highlighted is true are rendered server-side with
+  // the `hidden` attribute. When a section defaults show-hidden ON we
+  // must run the filter once at load so those rows become visible
+  // without a manual toggle (no-op when checkbox is unchecked).
+  applyFilters();
+
+  // V14: Show Cited-by toggle (off by default; persists in localStorage
+  // so it survives navigation back to /publications — R2-H4 post-impl fix).
+  const showCit = document.getElementById('show-citation-counts');
+  const CIT_KEY = 'cv-editor.show-citation-counts';
+  function applyCitationToggle() {
+    const on = showCit && showCit.checked;
+    document.querySelectorAll('.col-citation-count').forEach(c => { c.hidden = !on; });
+    document.querySelectorAll('.col-citation-count-head').forEach(c => { c.hidden = !on; });
+  }
+  if (showCit) {
+    try {
+      if (localStorage.getItem(CIT_KEY) === '1') showCit.checked = true;
+    } catch (_) { /* private mode etc. */ }
+    applyCitationToggle();
+    showCit.addEventListener('change', () => {
+      try { localStorage.setItem(CIT_KEY, showCit.checked ? '1' : '0'); } catch (_) {}
+      applyCitationToggle();
+    });
+  }
+
+  // 2026-05-26: Show Media counts toggle (mirrors the Cited-by toggle
+  // exactly: off by default, persists in localStorage). Column shows
+  // "shown / total" outlet counts per row.
+  const showMedia = document.getElementById('show-media-counts');
+  const MEDIA_KEY = 'cv-editor.show-media-counts';
+  function applyMediaToggle() {
+    const on = showMedia && showMedia.checked;
+    document.querySelectorAll('.col-media-count').forEach(c => { c.hidden = !on; });
+    document.querySelectorAll('.col-media-count-head').forEach(c => { c.hidden = !on; });
+  }
+  if (showMedia) {
+    try {
+      if (localStorage.getItem(MEDIA_KEY) === '1') showMedia.checked = true;
+    } catch (_) { /* private mode etc. */ }
+    applyMediaToggle();
+    showMedia.addEventListener('change', () => {
+      try { localStorage.setItem(MEDIA_KEY, showMedia.checked ? '1' : '0'); } catch (_) {}
+      applyMediaToggle();
+    });
+  }
+  if (filterSub) filterSub.addEventListener('change', applyFilters);
+  if (filterInst) filterInst.addEventListener('change', applyFilters);
+
+  // ---- Sortable columns (V5-A) ----
+  // Click a header to sort by that column. Second click reverses. Third
+  // clears (returns to the server's default sort).
+  const tbody = document.querySelector('table.entries tbody');
+  const headers = document.querySelectorAll('th.sortable-col');
+  const originalOrder = Array.from(tbody.querySelectorAll('tr.entry-row'));
+  let sortState = {col: null, dir: 0};  // dir: 0=none, 1=asc, -1=desc
+
+  function clearIndicators() {
+    headers.forEach(h => {
+      h.querySelector('.sort-indicator').textContent = '';
+      h.setAttribute('aria-sort', 'none');
+    });
+  }
+  function setIndicator(h, dir) {
+    clearIndicators();
+    h.querySelector('.sort-indicator').textContent = dir === 1 ? ' ▲' : ' ▼';
+    h.setAttribute('aria-sort', dir === 1 ? 'ascending' : 'descending');
+  }
+  function compareRows(a, b, col, kind) {
+    const av = (a.querySelector(`.col-${col}`)?.dataset.sortValue ?? '').toString();
+    const bv = (b.querySelector(`.col-${col}`)?.dataset.sortValue ?? '').toString();
+    if (kind === 'num') {
+      const an = parseFloat(av), bn = parseFloat(bv);
+      // NaN values sort to the bottom regardless of direction.
+      if (isNaN(an) && isNaN(bn)) return 0;
+      if (isNaN(an)) return 1;
+      if (isNaN(bn)) return -1;
+      return an - bn;
+    }
+    return av.localeCompare(bv, undefined, {numeric: true, sensitivity: 'base'});
+  }
+  function renderOrder(rows) {
+    rows.forEach(r => tbody.appendChild(r));
+    // Renumber the # column to match the new visible order. Publications
+    // count DOWN (newest=highest) per data-num-reverse on the table; all
+    // other sections count up.
+    const table = document.querySelector('table.entries');
+    const reverse = table && table.dataset.numReverse === '1';
+    const n = rows.length;
+    rows.forEach((r, i) => {
+      const num = r.querySelector('td.num');
+      if (num) num.textContent = reverse ? (n - i) : (i + 1);
+    });
+  }
+  function sortBy(col, kind) {
+    let dir = 1;
+    if (sortState.col === col) {
+      // Cycle: none → asc → desc → none.
+      dir = sortState.dir === 1 ? -1 : (sortState.dir === -1 ? 0 : 1);
+    }
+    if (dir === 0) {
+      sortState = {col: null, dir: 0};
+      clearIndicators();
+      renderOrder(originalOrder);
+      return;
+    }
+    sortState = {col, dir};
+    const visibleRows = Array.from(tbody.querySelectorAll('tr.entry-row'));
+    visibleRows.sort((a, b) => dir * compareRows(a, b, col, kind));
+    renderOrder(visibleRows);
+    const h = Array.from(headers).find(x => x.dataset.col === col);
+    if (h) setIndicator(h, dir);
+  }
+  headers.forEach(h => h.addEventListener('click', () => {
+    sortBy(h.dataset.col, h.dataset.kind);
+  }));
+
+  // ---- V9: bulk action toolbar (publications only) ----
+  const bulkToolbar = document.getElementById('bulk-toolbar');
+  if (bulkToolbar) {
+    const selects = document.querySelectorAll('input.row-select');
+    const countEl = document.getElementById('bulk-count');
+    const selectAll = document.getElementById('select-all');
+    const actionSel = document.getElementById('bulk-action');
+    const targetSel = document.getElementById('bulk-target');
+    const clearBtn = document.getElementById('bulk-clear');
+
+    let wasHidden = bulkToolbar.hidden;
+    function refreshBulkUI() {
+      const n = Array.from(selects).filter(c => c.checked).length;
+      countEl.textContent = n;
+      const nowHidden = (n === 0);
+      bulkToolbar.hidden = nowHidden;
+      // R3-MED V8-V11: scroll the toolbar into view on first reveal so
+      // keyboard / screen-reader users notice it appeared.
+      if (wasHidden && !nowHidden) {
+        bulkToolbar.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      }
+      wasHidden = nowHidden;
+    }
+    selects.forEach(c => c.addEventListener('change', refreshBulkUI));
+    if (selectAll) selectAll.addEventListener('change', () => {
+      selects.forEach(c => {
+        if (!c.closest('tr').hidden) c.checked = selectAll.checked;
+      });
+      refreshBulkUI();
+    });
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+      selects.forEach(c => c.checked = false);
+      if (selectAll) selectAll.checked = false;
+      refreshBulkUI();
+    });
+    actionSel.addEventListener('change', () => {
+      targetSel.hidden = (actionSel.value !== 'move_subsection');
+    });
+    window.confirmBulk = function() {
+      const n = Array.from(selects).filter(c => c.checked).length;
+      if (n === 0) {
+        alert('No rows selected.');
+        return false;
+      }
+      const act = actionSel.value;
+      if (!act) {
+        alert('Pick an action.');
+        return false;
+      }
+      const labels = {
+        set_hidden: 'mark as hidden',
+        unset_hidden: 'un-hide (show)',
+        move_subsection: `move to "${targetSel.value}"`,
+      };
+      return confirm(`${labels[act]} ${n} entr${n === 1 ? 'y' : 'ies'}?`);
+    };
+  }
+})();
+</script>
+{% endblock %}

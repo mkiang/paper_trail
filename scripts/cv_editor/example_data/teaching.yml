@@ -1,0 +1,44 @@
+# Teaching Experience — clustered by institution, entries auto-sorted by
+# date (most recent first) within each cluster.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Schema:
+#   - institution:  string. Renders as bold cluster header.
+#   - city:         string. Optional. Appended to institution as ", city".
+#   - audiences (optional):  per-cluster allowlist (does NOT cascade — the
+#                   teaching renderer evaluates visibility per entry only,
+#                   so cluster-level audiences here are effectively a hint
+#                   for the author; entries still need their own gate).
+#   - entries:      list of teaching activities. Each item:
+#       - date:     string. "MM/YYYY", "MM/YYYY - MM/YYYY", "YYYY",
+#                   "YYYY - YYYY", or trailing-dash "YYYY -" for ongoing.
+#                   Renderer parses these for reverse-chronological sort.
+#       - role:     string. Activity role. Rendered italic.
+#       - course:   string. Course/activity name. Rendered regular.
+#       - audiences (optional): list. Per-entry allowlist.
+#       - hide-from (optional): list. Per-entry blocklist.
+#       - highlighted (optional, bool): hide the entry unless built with
+#                   `--input show_highlighted=true`. Use it to keep an
+#                   activity in YAML while it awaits review.
+#
+# Entries can be added in any order — the renderer sorts within each
+# cluster by end-date desc, then start-date desc, stable for ties.
+# Open-ended "YYYY -" entries always sort to the top of their cluster.
+
+- institution: Example University
+  city: Exampleville, CA
+  entries:
+  - date: 01/2024 -
+    role: Course Director
+    course: "EXMPL 201: Methods for Applied Examples"
+  - date: 09/2022 - 12/2023
+    role: Guest Lecturer
+    course: Introduction to Synthetic Cohorts
+    highlighted: true
+- institution: Beta College
+  city: Boston, MA
+  entries:
+  - date: "2021"
+    role: Teaching Assistant
+    course: Advanced Examples

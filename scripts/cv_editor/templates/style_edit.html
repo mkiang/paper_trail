@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'new' %}New variant{% else %}Edit {{ form.filename }}{% endif %} — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('style_list') }}">&larr; back to Style / build variants</a></p>
+
+<h1>{% if mode == 'new' %}New build variant{% else %}Edit variant <code>{{ form.filename }}.pdf</code>{% endif %}</h1>
+<p class="hint">A variant maps to one PDF in <code>output/</code>. The flags below become <code>--input key=value</code> args to <code>typst compile</code>; leaving a flag unchecked uses the renderer default from <code>lib/flags.typ</code>.</p>
+
+{% if extra_warning %}
+<div class="banner banner-warn">{{ extra_warning }}</div>
+{% endif %}
+
+{% if errors %}
+<div class="banner banner-warn">
+  <strong>Could not save.</strong>
+  <ul class="error-list">
+    {% for fname, msg in errors.items() %}
+    <li><a href="#f-{{ fname }}"><code>{{ fname }}</code></a>: {{ msg }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('style_save') }}" id="edit-form" autocomplete="off">
+  <input type="hidden" name="mode" value="{{ mode }}">
+  {% if idx is not none %}<input type="hidden" name="idx" value="{{ idx }}">{% endif %}
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+
+  <div class="form-row {% if errors.filename %}has-error{% endif %}">
+    <label for="f-filename">Filename <span class="req">*</span></label>
+    <div>
+      <input type="text" id="f-filename" name="filename" value="{{ form.filename }}" required placeholder="e.g., cv  or  academic  or  for-job-app">
+      <p class="hint">Lowercase letters, digits, <code>-</code>, <code>_</code>. Becomes <code>output/&lt;filename&gt;.pdf</code>.</p>
+      {% if errors.filename %}<div class="error">{{ errors.filename }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="form-row {% if errors.audience %}has-error{% endif %}">
+    <label for="f-audience">Audience filter</label>
+    <div>
+      <select id="f-audience" name="audience">
+        <option value="" {% if not form.audience %}selected{% endif %}>(default: full — show everything)</option>
+        {% for a in audiences %}
+        <option value="{{ a }}" {% if form.audience == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+      <p class="hint">Hides entries whose <code>audiences:</code> list excludes this tag, and entries whose <code>hide-from:</code> list includes it. <em>full</em> shows everything (modulo <code>hide-from</code>).</p>
+      {% if errors.audience %}<div class="error">{{ errors.audience }}</div>{% endif %}
+    </div>
+  </div>
+
+  <fieldset class="flag-fieldset">
+    <legend>Render flags</legend>
+
+    <label class="flag-label">
+      <input type="checkbox" name="review" {% if form.review %}checked{% endif %}>
+      <strong>review</strong> — yellow-highlight draft regions wrapped in <code>#draft[...]</code>.
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_pending" {% if form.show_pending %}checked{% endif %}>
+      <strong>show_pending</strong> — include the <em>Pending Support</em> subsection (hidden by default).
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_oa" {% if form.show_oa %}checked{% endif %}>
+      <strong>show_oa</strong> — show the per-publication open-access glyph row (paper / code / data).
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_contributions" {% if form.show_contributions %}checked{% endif %}>
+      <strong>show_contributions</strong> — show the per-publication <em>Contributions:</em> sub-bullet describing your role.
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_notes" {% if form.show_notes %}checked{% endif %}>
+      <strong>show_notes</strong> — master gate for ALL per-publication typed-note sub-bullets (commentary, letter, response, media, editorial, contributions, note). Hidden by default. Sits above <code>show_media</code> / <code>show_contributions</code> (those still also need their own flag). Does not affect OA or citation tags. Some variants (e.g. internal + everything) use this.
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_media" {% if form.show_media %}checked{% endif %}>
+      <strong>show_media</strong> — show <em>Selected media coverage:</em> outlets that are NOT marked <code>highlighted: true</code> (also requires <code>show_notes</code>). Hidden by default; some variants (e.g. internal + everything) use this. Pair with <code>show_hidden_media</code> to also surface hidden outlets.
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_hidden_media" {% if form.show_hidden_media %}checked{% endif %}>
+      <strong>show_hidden_media</strong> — show <em>only</em> media outlets that ARE marked <code>highlighted: true</code> (also requires <code>show_notes</code>). Hidden by default. Use alone for a hidden-only audit pass, or combine with <code>show_media</code> for the full press list. The <em>everything</em> variant uses both.
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_media_urls" {% if form.show_media_urls %}checked{% endif %}>
+      <strong>show_media_urls</strong> — hyperlink media outlet names to their press article URLs. Renderer default is <em>on</em>; uncheck to render outlet names as plain text (useful for print/paper variants where clickable links don't help, or to avoid accidental clicks on long press lists). Has no effect when both <code>show_media</code> and <code>show_hidden_media</code> are off.
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_highlighted" {% if form.show_highlighted %}checked{% endif %}>
+      <strong>show_highlighted</strong> — include entries and non-media notes flagged <code>highlighted: true</code> (pending-review or otherwise gated content). The <em>everything</em> variant uses this. As of 2026-05-26, this flag no longer affects individual media outlets — those live under <code>show_hidden_media</code>.
+    </label>
+
+    <label class="flag-label">
+      <input type="checkbox" name="show_dollars" {% if form.show_dollars %}checked{% endif %}>
+      <strong>show_dollars</strong> — show grant dollar amounts. Renderer default is <em>on</em> (dollars visible); uncheck for institution-internal CVs.
+    </label>
+  </fieldset>
+
+  {% if preview %}
+  <fieldset class="flag-fieldset">
+    <legend>Impact preview <span class="muted">(estimated; renderer does the real filtering)</span></legend>
+    <p class="hint">With <code>audience={{ preview.audience }}</code> and <code>show_highlighted={{ preview.show_highlighted }}</code>:</p>
+    <table class="entries impact-preview">
+      <thead><tr><th>Section</th><th>Visible</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for key, row in preview.per_section.items() %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td><strong>{{ row.visible }}</strong></td>
+          <td class="muted">{{ row.total }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="impact-total">
+          <td><strong>Total</strong></td>
+          <td><strong>{{ preview.total_visible }}</strong></td>
+          <td class="muted">{{ preview.total_total }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">Save the form first to refresh this preview against your new flags.</p>
+  </fieldset>
+  {% endif %}
+
+  <div class="form-actions">
+    <button type="submit" class="btn-primary">Save</button>
+    <a href="{{ url_for('style_list') }}" class="btn-secondary">Cancel</a>
+  </div>
+</form>
+<script src="{{ url_for('static', filename='form_dirty_guard.js') }}"></script>
+<script>FormDirtyGuard.attach("edit-form");</script>
+{% endblock %}

@@ -1,0 +1,22 @@
+# Frozen export-test fixture (M5 5b). Synthetic, non-real. Drives golden tests.
+name: Jane Q Public
+position: Assistant Professor
+department: Department of Examples
+institution: Example University
+email: jane@example.org
+website: https://example.org/jane
+self_bold: Public JQ
+sections:
+  - education
+  - appointments
+  - publications
+  - presentations
+  - research_support
+  - service
+  - teaching
+  - honors
+  - mentees
+build_variants:
+  - filename: fullcv
+    inputs:
+      audience: public-health

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tracker_status_label %}
+{% block title %}Tracker URLs awaiting resolution{% endblock %}
+{% block content %}
+<h1>Tracker URLs awaiting resolution</h1>
+
+{# Console at the top so resolve-all / verify-resolved progress is
+   visible without scrolling. Hidden by default (zero vertical space
+   until a button activates it). Single console serves both buttons. #}
+{% include "_build_console.html" %}
+
+{% set total = counts.total_trackers %}
+{% set pubs = counts.pubs_with_trackers %}
+{% if total == 0 %}
+<div class="banner banner-ok">
+  <strong>All tracker URLs resolved.</strong> Nothing left in the queue.
+  {# V13-V19-D R3-L1 (2026-05-18): after a long coffee-shop resolve
+     session, give the user a clear next step instead of stranding
+     them on an empty page. #}
+  <div class="banner-actions">
+    <a class="btn-link" href="{{ url_for('section_list', section='publications') }}">Back to publications &rarr;</a>
+    &middot;
+    <a class="btn-link" href="{{ url_for('index') }}">Back to home &rarr;</a>
+  </div>
+</div>
+{% endif %}
+
+{# V20 D3 (2026-05-18): optional banner — visible whenever resolved
+   tracker URLs are >30 days old. HEAD-probes the final URLs to catch
+   journalism URL rot. Independent of the unresolved-trackers queue. #}
+{% if stale_resolved_count and stale_resolved_count > 0 %}
+<div class="banner banner-info">
+  <strong>
+    {{ stale_resolved_count }} resolved tracker {{ stale_resolved_count|pluralize("URL", "URLs") }}
+    &ge;30 days old.
+  </strong>
+  <form id="verify-resolved-form" method="POST"
+        action="{{ url_for('publications_trackers_verify_resolved') }}"
+        style="display:inline; margin-left:1em;">
+    <button type="submit" class="btn-secondary" data-verify-resolved
+            title="HEAD-probes each resolved URL. Live URLs reset the TTL clock; dead URLs surface in the SSE log so you can fix the YAML manually.">
+      Verify resolved trackers
+    </button>
+  </form>
+  <small class="muted">URL rot in journalism is real — press releases retire, redirect chains break.</small>
+</div>
+{% endif %}
+
+{% if total > 0 %}
+<div class="banner banner-warn">
+  <strong>
+    {{ pubs }} {{ pubs|pluralize("publication", "publications") }}
+    {{ pubs|pluralize("has", "have") }}
+    {{ total }} unresolved tracker {{ total|pluralize("URL", "URLs") }}.
+  </strong>
+  {# Failed entries are persisted with attempt counts (2026-06-08) so the
+     Attempts / Last-tried columns are populated. They still re-attempt on
+     every Resolve click (should_attempt is True for non-resolved). #}
+  {% set _by = [
+    (counts.by_status.failed_network, 'Network error (will re-attempt)', 'Network errors (will re-attempt)'),
+    (counts.by_status.failed_rate_limit, 'Rate-limited (will re-attempt)', 'Rate-limited (will re-attempt)'),
+    (counts.by_status.failed_no_redirect, 'No redirect (will re-attempt)', 'No redirect (will re-attempt)'),
+    (counts.by_status.unknown, 'Not yet tried', 'Not yet tried'),
+  ] %}
+  {% set _nonzero = _by | rejectattr(0, 'equalto', 0) | list %}
+  {% if _nonzero %}
+  <small class="muted">By status:
+    {% for n, sg, pl in _nonzero %}{% if not loop.first %} &middot; {% endif -%}
+      {{ n }} {{ sg if n == 1 else pl }}{%- endfor %}.
+  </small>
+  {% endif %}
+</div>
+
+<form id="resolve-all-form" method="POST"
+      action="{{ url_for('publications_trackers_resolve_all') }}"
+      style="margin-bottom:1em;">
+  <button type="submit" class="btn-primary" data-resolve-all
+          title="Resolves each tracker URL via HEAD &rarr; GET &rarr; meta-refresh &rarr; unshorten.me. Cached results are not re-attempted.">
+    Resolve all unresolved trackers
+  </button>
+  <span class="muted">
+    Sweeps every tracker on this page. Already-resolved URLs are
+    remembered, so re-runs only attempt the stuck ones.
+  </span>
+</form>
+
+{% for g in groups %}
+<section class="tracker-pub">
+  <h2>
+    <a href="{{ g.view_url }}">{{ g.pub_title or '(untitled)' }}</a>
+    {% if g.pub_date %}<span class="muted"> &middot; {{ g.pub_date }}</span>{% endif %}
+    <span class="muted"> &middot; {{ g.rows|length }} {{ g.rows|length|pluralize("tracker", "trackers") }}</span>
+  </h2>
+  <div class="trackers-table-wrap">
+  <table class="trackers-table">
+    <thead>
+      <tr>
+        <th>Outlet</th>
+        <th>Status</th>
+        <th>Attempts</th>
+        <th>Last tried</th>
+        <th class="muted">Tracker URL</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in g.rows %}
+      <tr>
+        <td>{{ r.outlet_name or '(unnamed)' }}</td>
+        <td>
+          <span class="badge badge-{{ r.status }}" title="{{ r.status }}">{{ tracker_status_label(r.status) }}</span>
+          {% if r.error %}<small class="muted" title="{{ r.error }}">&hellip;</small>{% endif %}
+        </td>
+        <td class="num">{{ r.attempt_count }}</td>
+        <td class="muted" title="{{ r.last_attempt_ts }}">{{ r.last_attempt_ts[:10] or '—' }}</td>
+        <td><code class="tracker-url" title="{{ r.url }}">{{ r.url[:50] }}{% if r.url|length > 50 %}&hellip;{% endif %}</code></td>
+        <td>
+          {# Per-row Resolve sends idx + mtime_ns so the cache + YAML
+             write happens atomically — the row can't strand in the
+             cache as "resolved" while YAML keeps the tracker URL. #}
+          <button type="button" class="btn-secondary tracker-resolve-row"
+                  data-url="{{ r.url }}" data-force="0"
+                  data-idx="{{ g.pub_idx }}" data-mtime="{{ pub_mtime_ns }}"
+                  title="Resolve this tracker URL (writes the resolved URL back to YAML atomically).">
+            Resolve
+          </button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endfor %}
+{% endif %}
+
+<script src="{{ url_for('static', filename='build_console.js') }}"></script>
+<script>
+// Wire the "Resolve all" button to the SSE console.
+BuildConsole.attach({
+  trigger: '[data-resolve-all]',
+  urlFromBtn: () => '{{ url_for("publications_trackers_resolve_all") }}',
+  bodyFromBtn: () => new URLSearchParams(),
+  consoleEl: document.getElementById('build-console'),
+  bodyEl:    document.getElementById('build-console-body'),
+  footerEl:  document.getElementById('build-console-footer'),
+  closeBtn:  document.getElementById('build-console-close'),
+  labelFromBtn: () => 'resolve-all',
+  onDone: () => { setTimeout(() => location.reload(), 3500); },
+});
+
+// V20 D3 (2026-05-18): "Verify resolved" sweep — same SSE console.
+if (document.querySelector('[data-verify-resolved]')) {
+  BuildConsole.attach({
+    trigger: '[data-verify-resolved]',
+    urlFromBtn: () => '{{ url_for("publications_trackers_verify_resolved") }}',
+    bodyFromBtn: () => new URLSearchParams(),
+    consoleEl: document.getElementById('build-console'),
+    bodyEl:    document.getElementById('build-console-body'),
+    footerEl:  document.getElementById('build-console-footer'),
+    closeBtn:  document.getElementById('build-console-close'),
+    labelFromBtn: () => 'verify-resolved',
+    // No reload — the unresolved queue didn't change; the verify
+    // sweep only touched TTL timestamps on resolved entries.
+  });
+}
+
+// V20 D2 (2026-05-18): per-row Resolve uses ATOMIC mode — sends
+// idx + mtime_ns so resolve + YAML-write happens in a single
+// transaction. On 409 the cache+YAML are still in sync (no write
+// happened); reload the trackers page so fresh mtime is picked up.
+// On success the YAML is written; reload to refresh the queue.
+document.querySelectorAll('.tracker-resolve-row').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const url = btn.dataset.url;
+    const force = btn.dataset.force === '1';
+    const idx = btn.dataset.idx;
+    const mtime = btn.dataset.mtime;
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = 'Resolving…';
+    try {
+      const fd = new FormData();
+      fd.append('url', url);
+      if (force) fd.append('force', '1');
+      if (idx) fd.append('idx', idx);
+      if (mtime) fd.append('mtime_ns', mtime);
+      const r = await fetch('{{ url_for("publications_altmetric_resolve") }}', {
+        method: 'POST', body: fd,
+      });
+      if (r.status === 409) {
+        // Stale form — another save touched publications.yml. Reload
+        // so the user sees the current state.
+        btn.textContent = 'Stale — reloading';
+        setTimeout(() => location.reload(), 800);
+        return;
+      }
+      const j = await r.json();
+      if (j.final_url && j.atomic_written) {
+        btn.textContent = 'Resolved ✓';
+        setTimeout(() => location.reload(), 600);
+      } else if (j.final_url) {
+        // Resolved at cache-only level (no idx wired up — defensive
+        // fallback). Old behavior: reload to refresh.
+        btn.textContent = 'Cache resolved ✓';
+        setTimeout(() => location.reload(), 600);
+      } else {
+        btn.textContent = j.status || 'failed';
+        btn.disabled = false;
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  });
+});
+</script>
+{% endblock %}

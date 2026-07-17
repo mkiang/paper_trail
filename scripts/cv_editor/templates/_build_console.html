@@ -1,0 +1,15 @@
+{# Shared SSE build console pane. Pages include this and wire it via
+   static/build_console.js. #}
+<div id="build-console" class="build-console" hidden>
+  <div class="build-console-head">
+    <strong>Build output</strong>
+    <span class="grow"></span>
+    <button type="button" class="btn-secondary" id="build-console-close">Close</button>
+  </div>
+  {# The streaming body is keyboard-scrollable but NOT a live region: it appends
+     one node per SSE line, which a live <pre> would announce line-by-line and
+     bury the result. The one-line footer (set once at start + once at done) is
+     the live region a screen reader hears instead. #}
+  <pre id="build-console-body" tabindex="0" aria-label="Build log output"></pre>
+  <div id="build-console-footer" class="muted" role="status" aria-live="polite"></div>
+</div>

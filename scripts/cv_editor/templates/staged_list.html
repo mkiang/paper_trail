@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Staged citations — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('publication_import') }}">&larr; back</a></p>
+<h1>Staged citations <span class="muted">({{ staged | length }})</span></h1>
+
+<p class="hint">Pick one to enrich + open in the entry form. Bulk-import will land in V2.</p>
+
+<table class="entries">
+  <thead><tr><th>#</th><th>Source</th><th>IDs</th><th>Title</th><th></th></tr></thead>
+  <tbody>
+    {% for s in staged %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td><span class="badge">{{ s._source }}</span></td>
+      <td>
+        {% if s.pmid %}<code>PMID {{ s.pmid }}</code>{% endif %}
+        {% if s.doi %}<code>DOI {{ s.doi[:30] }}</code>{% endif %}
+      </td>
+      <td>{{ (s.title or '(no title parsed)')[:80] }}</td>
+      <td>
+        <form method="POST" action="{{ url_for('publication_import') }}" style="display:inline">
+          <input type="hidden" name="source" value="doi_pmid">
+          <input type="hidden" name="ident" value="{{ s.pmid or s.doi or '' }}">
+          <button type="submit" class="btn-primary">Use this →</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

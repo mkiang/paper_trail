@@ -1,6 +1,12 @@
 output/
+publications.bib
 __pycache__/
 *.pyc
 .DS_Store
 *conflicted copy*
 .venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.cache/
+.cv_editor_backups/

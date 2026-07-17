@@ -1,0 +1,14 @@
+# Deterministic line endings across machines: normalize text to LF on checkin,
+# so a machine's core.autocrlf can't introduce CRLF churn.
+* text=auto eol=lf
+
+# Known binaries — never apply text/eol filters.
+*.otf   binary
+*.ttf   binary
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary

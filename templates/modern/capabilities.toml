@@ -1,0 +1,12 @@
+# Per-template editor capabilities (see docs/capabilities.md for the schema).
+#
+# Each key gates whether the editor registers an optional feature's routes and
+# shows its nav links. A missing file or key defaults FALSE (fail-safe). `modern`
+# is the public default template; freeze/flatten, the typography-knob editor, and
+# the Altmetric integration rely on layout assets this template doesn't provide,
+# so every capability is OFF — those routes never register and their nav links
+# never show.
+[capabilities]
+freeze = false
+typography = false
+altmetric = false

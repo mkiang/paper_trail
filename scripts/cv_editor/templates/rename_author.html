@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Rename author — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('section_list', section='publications') }}">&larr; back to Publications</a></p>
+
+<h1>Rename author across all publications</h1>
+<p class="hint">Useful for fixing a misspelling, normalizing initial-spacing, or canonicalizing a compound surname. Every occurrence of <em>Source</em> in any publication's author list will be replaced with <em>Target</em>. Dict-form authors (co-first / co-senior) keep their flags; only the name changes.</p>
+
+{% if stage == 'ask' or stage == 'preview' %}
+<form method="POST" action="{{ url_for('publication_rename_author') }}" id="rename-form">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+
+  <div class="form-row">
+    <label for="rn-old">Source author name</label>
+    <div>
+      <input type="text" id="rn-old" name="old_name" list="all-author-names" value="{{ old_name }}" placeholder="Type to filter; pick from the suggestion list" autofocus>
+      <datalist id="all-author-names">
+        {% for n in all_names %}<option value="{{ n }}">{% endfor %}
+      </datalist>
+      <p class="hint">{{ all_names | length }} distinct names in publications.yml.</p>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <label for="rn-new">Target author name</label>
+    <input type="text" id="rn-new" name="new_name" value="{{ new_name }}" placeholder="What every match becomes">
+  </div>
+
+  {% if stage == 'preview' %}
+    <h2>Affected publications ({{ affected | length }})</h2>
+    {% if affected %}
+    <table class="entries">
+      <thead><tr><th>#</th><th>Subsection</th><th>Title</th><th>Author list (before)</th></tr></thead>
+      <tbody>
+        {% for a in affected %}
+        <tr>
+          <td>{{ a.global_idx + 1 }}</td>
+          <td class="muted">{{ a.subsection }}</td>
+          <td><a href="{{ url_for('entry_view', section='publications', idx=a.global_idx) }}">{{ a.title }}</a></td>
+          <td>
+            {% for n in a.before_authors %}
+              {% if n == old_name %}<strong class="match">{{ n }}</strong>{% else %}{{ n }}{% endif %}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No publications mention <code>{{ old_name }}</code>. Check the spelling or capitalization.</p>
+    {% endif %}
+  {% endif %}
+
+  <div class="form-actions">
+    {% if stage == 'ask' %}
+      <button type="submit" name="action" value="preview" class="btn-primary">Preview</button>
+    {% else %}
+      <button type="submit" name="action" value="apply" class="btn-primary" {% if not affected or not new_name %}disabled{% endif %}>Apply rename</button>
+      <button type="submit" name="action" value="preview" class="btn-secondary">Refresh preview</button>
+    {% endif %}
+    <a href="{{ url_for('section_list', section='publications') }}" class="btn-secondary">Cancel</a>
+  </div>
+</form>
+<script src="{{ url_for('static', filename='form_dirty_guard.js') }}"></script>
+<script>FormDirtyGuard.attach("rename-form");</script>
+{% endif %}
+{% endblock %}

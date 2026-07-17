@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tracker_banner_global, pubmed_sync_banner_global, citations_banner_global, qc_findings_banner_global, data_check_banner_global, onboarding_banner_global, future_pending_banner_global %}
+{% block content %}
+<h1>CV sections</h1>
+
+{# M5-5d CP8: first-run card ABOVE everything (the other banners are
+   structurally silent on an empty corpus, so no stacking). #}
+{{ onboarding_banner_global(corpus_empty|default(false)) }}
+{# M5 5c-i: data-validation banner first — an ERROR means the build is broken. #}
+{{ data_check_banner_global(data_error_count|default(0), data_warning_count|default(0)) }}
+{% if capabilities.altmetric %}{{ tracker_banner_global(tracker_counts, stale_resolved_count) }}{% endif %}
+{# V13-V19-D R3-M6 (2026-05-18): cross-session discoverability for the
+   other editor-wide queues. Both macros render nothing when their count
+   is 0, so healthy state stays clean. #}
+{{ pubmed_sync_banner_global(pubmed_flagged_count, pubmed_cross_silenced_count|default(0)) }}
+{{ citations_banner_global(citations_never_attempted) }}
+{{ qc_findings_banner_global(qc_findings_count, qc_cross_silenced_count|default(0)) }}
+{{ future_pending_banner_global(future_pending_count|default(0)) }}
+
+{# CP8: the rebuild bar is suppressed in the first-run state — "Run
+   ./build.sh now" over an empty corpus is a confusing CTA; the onboarding
+   card carries the story instead. #}
+{% if rebuild_needed and not corpus_empty %}
+<div class="banner banner-warn rebuild-bar">
+  <div>YAML newer than <code>output/{{ default_variant }}.pdf</code> — rebuild needed.</div>
+  <div>
+    <button type="button" class="btn-primary" data-rebuild="cv_only">Rebuild {{ default_variant }}.pdf only</button>
+    <button type="button" class="btn-secondary" data-rebuild="full">Rebuild all (build.sh)</button>
+  </div>
+</div>
+{% elif not cv_pdf_exists and not corpus_empty %}
+<div class="banner banner-info">
+  <code>output/{{ default_variant }}.pdf</code> not present yet —
+  <button type="button" class="btn-primary" data-rebuild="full">Run ./build.sh now</button>
+</div>
+{% elif corpus_empty %}
+{# first-run: no rebuild chatter; the onboarding card is the whole story #}
+{% else %}
+<div class="banner banner-info rebuild-bar">
+  <div>All outputs up-to-date.</div>
+  <div>
+    <button type="button" class="btn-secondary" data-rebuild="full">Rebuild all anyway</button>
+  </div>
+</div>
+{% endif %}
+
+{% include "_build_console.html" %}
+
+<div class="grid">
+  {% for s in sections %}
+  <div class="card-wrap">
+    <a class="card" href="{{ s.list_url }}">
+      <div class="card-title">{{ s.label }}</div>
+      <div class="card-meta">{{ s.count }} entries</div>
+    </a>
+    {% if s.new_url %}
+    <a class="btn-quick-add" href="{{ s.new_url }}"
+       title="Add a new {{ s.label }} entry (skips the section list)"
+       aria-label="Add new entry to {{ s.label }}">+</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<p class="muted">Edit any section by clicking its card.
+  <a href="{{ url_for('publication_rename_author') }}">Rename author across all publications →</a>
+  &nbsp;·&nbsp;
+  <a href="{{ url_for('search_replace') }}">Find &amp; replace across all sections →</a></p>
+
+<script src="{{ url_for('static', filename='build_console.js') }}"></script>
+<script>
+BuildConsole.attach({
+  trigger: '[data-rebuild]',
+  urlFromBtn: () => '{{ url_for("rebuild_stream") }}',
+  bodyFromBtn: btn => new URLSearchParams({mode: btn.dataset.rebuild}),
+  consoleEl: document.getElementById('build-console'),
+  bodyEl:    document.getElementById('build-console-body'),
+  footerEl:  document.getElementById('build-console-footer'),
+  closeBtn:  document.getElementById('build-console-close'),
+  labelFromBtn: btn => btn.dataset.rebuild,
+});
+</script>
+{% endblock %}

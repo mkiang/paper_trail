@@ -1,0 +1,74 @@
+# Presentations — five subsections sharing a single uniform entry schema.
+# Talks are reverse-numbered PER SUBSECTION (newest in each subsection
+# gets the highest number, oldest gets 1) via an explicit counter — the
+# numbering does NOT continue across subsections.
+#
+# YAML conventions: see header of data/meta.yml.
+#
+# Schema:
+#   - subsection: string. Renders as #subsection[...] header. Author-ordered
+#                 (no auto-sort at the subsection level).
+#   - audiences / hide-from (optional): cascade to entries.
+#   - entries: list. Each item shares the same fields regardless of
+#              subsection — fields that don't apply are simply omitted.
+#       - date:         string. Required. "MM/YYYY". Renders as
+#                       "(Month YYYY)" via format-month-year(); sorts
+#                       reverse-chronologically inside the subsection.
+#       - authors:      string. Optional. Comma-separated author list,
+#                       rendered as plain text before the title. The
+#                       author's own name auto-bolds via meta.self_bold
+#                       (no manual *...* needed).
+#       - title:        string. Optional. Sentence-case description.
+#                       Rendered plain after authors.
+#       - venue:        string. Required. Conference / institution name.
+#       - italic_venue: bool. Optional, default true. Set false for venues
+#                       that read better as plain text (e.g. invited
+#                       presentations where the "venue" is an institution
+#                       name rather than a named event).
+#       - location:     string. Optional. Trailing city/state appended
+#                       after the date. Used for invited presentations.
+#       - notes:        list. Optional. Sub-bullets rendered below the
+#                       talk. Each item is either a plain string OR a
+#                       dict: { text: "...", highlighted: true }
+#                       `highlighted: true` hides just that sub-bullet
+#                       unless built with `--input show_highlighted=true`.
+#                       Typical use: "Selected for press release.",
+#                       "Best student poster award."
+#       - audiences (optional): per-entry allowlist; wins over subsection.
+#       - hide-from (optional): per-entry blocklist; wins over subsection.
+#       - highlighted (optional, bool): hide the talk unless built with
+#                       `--input show_highlighted=true`.
+#
+# Render shape:
+#   [authors, ][title. ]{venue or *venue*} (date)[. location.]
+
+- subsection: Invited Presentations
+  entries:
+  - date: 09/2025
+    title: Building CVs from structured data.
+    venue: Department of Examples Seminar Series, Example University
+    italic_venue: false
+    location: Exampleville, CA
+    notes:
+    - Invited by the graduate student association.
+  - date: 04/2024
+    authors: Public JQ
+    title: Synthetic cohorts in practice.
+    venue: Institute for Applied Examples
+    italic_venue: false
+    location: Boston, MA
+- subsection: National and Regional Meetings (Podium Presentations)
+  entries:
+  - date: 06/2025
+    authors: Public JQ, Smith JA, Doe AB
+    title: Measuring example burdens in a synthetic population.
+    venue: Annual Meeting of the Example Research Society
+    notes:
+    - text: Selected for a press release.
+      highlighted: true
+- subsection: National and Regional Meetings (Poster Presentations)
+  entries:
+  - date: 10/2021
+    authors: Roe CD, Public JQ
+    title: Charting example trends over time.
+    venue: Example Epidemiology Congress
