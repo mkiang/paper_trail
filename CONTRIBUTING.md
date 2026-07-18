@@ -49,3 +49,30 @@ bash scripts/ci_leak_check.sh   # the structural gate CI also runs
 
 CI runs lint, the leak gate, the test suite, a render smoke, and a
 latest-Typst canary. A green run is required before merge.
+
+## Branch protection & merge policy
+
+`main` is branch-protected. Every change lands through a pull request, and the
+three gating checks (`lint`, `leak-gate`, `test`) must be green before a PR can
+merge; a branch must be up to date with `main` first. Force-pushes and branch
+deletion on `main` are blocked. (The latest-Typst canary runs but is advisory —
+it is intentionally *not* a merge gate, since it tracks an upstream release the
+project doesn't control.)
+
+This is a single-maintainer project, so PRs require **zero** approving reviews —
+GitHub won't let a sole maintainer approve their own PR, so the gate is the CI
+checks, not a second reviewer. The maintainer keeps admin bypass for
+fix-forward emergencies, which means a direct maintainer push to `main` skips
+the *pre-merge* leak gate. So, as a maintainer, run
+`bash scripts/ci_leak_check.sh` locally before any push to `main`, not only
+before opening a PR. (The gate also runs on `push` to `main`, but only after the
+commit has already landed.)
+
+The leak gate is **structural, not semantic**: it recognizes identifier *shapes*
+plus a small denylist of maintainer-specific tokens, but it cannot detect an
+unseen real identifier it was never told about. It is a backstop, not a
+guarantee — review your own diffs for anything that should not be public.
+
+If you rename a CI job, update the required-status-check contexts in the branch
+protection settings in the same change. A renamed-but-still-required check never
+reports and will block every future merge until the settings are corrected.
