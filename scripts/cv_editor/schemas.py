@@ -67,6 +67,27 @@ _HIGHLIGHTED_FIELD = {
     "type": "bool",
     "label": "Hidden by default (gated by --input show_highlighted=true)",
 }
+# Website-export fields (read only by an external site exporter; inert in the
+# Typst renderer). `web` is a select (NOT a bool: a bool deletes the key when
+# unchecked, so it can't express "force hide" — only "force show" / unset).
+_WEB_FIELD = {
+    "name": "web",
+    "type": "select",
+    "choices": ["", "show", "hide"],
+    "label": "Show on website (blank = automatic)",
+}
+_SLIDES_FIELD = {
+    "name": "slides",
+    "type": "text",
+    "label": "Slides URL/path (website)",
+    "placeholder": "site-root-relative, e.g. talks/my_talk.pdf",
+}
+_HOSTED_PDF_FIELD = {
+    "name": "paper_pdf",
+    "type": "text",
+    "label": "Hosted paper PDF path (website)",
+    "placeholder": "site-root-relative, e.g. papers/my_paper.pdf",
+}
 
 
 # ---------- Publications ----------
@@ -151,6 +172,8 @@ PUBLICATIONS = {
         },
         {"name": "open_access", "type": "open_access_dict", "label": "Open access"},
         {"name": "notes", "type": "typed_notes", "label": "Notes"},
+        _WEB_FIELD,
+        _HOSTED_PDF_FIELD,
         _HIGHLIGHTED_FIELD,
     ],
 }
@@ -217,6 +240,8 @@ PRESENTATIONS = {
             "placeholder": "City, State (used for invited presentations)",
         },
         {"name": "notes", "type": "simple_notes", "label": "Notes (sub-bullets)"},
+        _WEB_FIELD,
+        _SLIDES_FIELD,
         _AUDIENCES_FIELD,
         _HIDE_FROM_FIELD,
         _HIGHLIGHTED_FIELD,
@@ -362,6 +387,7 @@ TEACHING = {
             "placeholder": "e.g., Faculty Mentor, Guest Lecturer (italicized)",
         },
         {"name": "course", "type": "textarea", "required": True, "label": "Course / activity name"},
+        _WEB_FIELD,
         _AUDIENCES_FIELD,
         _HIDE_FROM_FIELD,
         _HIGHLIGHTED_FIELD,
