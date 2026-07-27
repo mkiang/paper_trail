@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.1.0
+
+Additive release supporting an external static-site export of the CV. No
+breaking changes.
+
+### Added
+
+- **Website-export editor fields.** `web` (a `show`/`hide`/blank select
+  controlling website visibility), `slides` (a presentation slide URL/path),
+  and `paper_pdf` (a hosted paper PDF path). All three are read only by an
+  external site exporter and are inert in the Typst renderer.
+- **Bulk website visibility** on the publications list: "Show on website" /
+  "Hide from website" bulk actions that set `web` on the selected entries.
+- **Public export API** in `cv_editor.export_core`: stable `mk`, `plain`,
+  `emphasis`, `strong`, `sup`, `link`, `self_bold_terms`, `visible`, and
+  `entry_visible` names (aliasing the internal helpers) so an out-of-package
+  exporter can reuse the engine's markup conversion and leak-guard visibility
+  logic without importing private symbols.
+- **"Commit pending edits" button** (`POST /commit`): stages the
+  editor-managed workspace files plus a freshly-regenerated `publications.bib`
+  and makes one local git commit. The add-set is a positive allowlist (never
+  `git add -A`, never QC/URL report churn); the route refuses a detached HEAD,
+  is inert outside a git worktree, and commits locally only (no push).
+
 ## 1.0.0
 
 The repository is now the **development home** for the engine and a full local
