@@ -120,6 +120,8 @@ def register_publications_routes(app: Flask, deps: PublicationsDeps) -> None:
     _BULK_ACTIONS = (
         "set_hidden",
         "unset_hidden",
+        "set_web_show",
+        "set_web_hide",
         "move_subsection",
     )
 
@@ -182,6 +184,10 @@ def register_publications_routes(app: Flask, deps: PublicationsDeps) -> None:
                     e["highlighted"] = True
                 elif action == "unset_hidden":
                     e.pop("highlighted", None)
+                elif action == "set_web_show":
+                    e["web"] = "show"
+                elif action == "set_web_hide":
+                    e["web"] = "hide"
                 n_changed += 1
 
         err = write_or_409(
@@ -204,10 +210,14 @@ def register_publications_routes(app: Flask, deps: PublicationsDeps) -> None:
             label = {
                 "set_hidden": "marked hidden",
                 "unset_hidden": "un-hidden",
+                "set_web_show": "set to show on the website",
+                "set_web_hide": "set to hide from the website",
             }[action]
             msg = f"{n_changed} entr{'y' if n_changed == 1 else 'ies'} {label}."
             if action == "set_hidden":
                 msg += " (Dropped from cv.pdf; still visible in everything.pdf.)"
+            elif action in ("set_web_show", "set_web_hide"):
+                msg += " (Applies to the website export only; the CV PDFs are unaffected.)"
             flash(msg, "ok")
         return redirect(url_for("section_list", section="publications"))
 
