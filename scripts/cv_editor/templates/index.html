@@ -46,6 +46,28 @@
 
 {% include "_build_console.html" %}
 
+{% if git_status and git_status.is_repo %}
+<div class="banner {{ 'banner-warn' if git_status.detached else ('banner-info' if git_status.pending else 'banner-ok') }} commit-bar">
+  {% if git_status.detached %}
+  <span>Git is on a <strong>detached HEAD</strong> — check out a branch to enable committing editor changes.</span>
+  {% else %}
+  <form method="POST" action="{{ url_for('commit_pending') }}" class="commit-form">
+    <span class="commit-summary">
+      {% if git_status.pending %}
+      <strong>{{ git_status.pending }}</strong> editor {{ git_status.pending|pluralize("file", "files") }} with uncommitted changes on <code>{{ git_status.branch }}</code>.
+      {% else %}
+      Editor files are committed on <code>{{ git_status.branch }}</code>.
+      {% endif %}
+    </span>
+    <input type="text" name="message" class="commit-message" maxlength="200"
+           placeholder="Commit message (optional)" aria-label="Commit message">
+    <button type="submit" class="btn-primary"{% if not git_status.pending %} title="Nothing pending — the commit will be a no-op"{% endif %}>Commit pending edits</button>
+  </form>
+  <p class="hint">Regenerates <code>publications.bib</code>, stages the editor-managed data files, and makes one local commit. It does not push — sync or push separately.</p>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="grid">
   {% for s in sections %}
   <div class="card-wrap">

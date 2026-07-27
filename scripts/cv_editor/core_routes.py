@@ -23,12 +23,13 @@ Behaviour-identical (M2 fingerprint guard).
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from filelock import Timeout
+from filelock import FileLock, Timeout
 from flask import (
     Flask,
     abort,
@@ -43,13 +44,80 @@ from cv_editor import (
     build_runner,
     bulk_replace,
     data_check,
+    paths,
     scaffold,
     schemas,
     sections,
     validate,
     yaml_io,
+    yaml_to_bibtex,
 )
 from cv_editor.yaml_io import CorruptedShapeError, StaleFileError
+
+# ----- "Commit pending edits" support (A6) -----------------------------------
+#
+# The commit button stages the files the editor MANAGES and makes one local git
+# commit in the workspace repo. The add-set is a POSITIVE allowlist: the safe
+# failure mode is UNDER-inclusion (a real sidecar left unstaged would keep the
+# tree dirty), so every editor-written data file lives here. QC/URL reports
+# (qc/report.*, qc/urls_report.md, qc/pubmed_sync_report.md,
+# qc/citations_report.md) are regenerated churn and are deliberately EXCLUDED —
+# they are never staged. data/*.yml is globbed at run time (top-level only, so
+# the data/example/ corpus — an engine asset, not user data — stays out).
+_COMMIT_STATIC_PATHS = (
+    "data/citation_counts.json",
+    "data/publications_pubmed_sync.json",
+    "qc/qc_decisions.json",
+    "qc/pubmed_sync_decisions.gen.yml",
+    "qc/pubmed_sync_decisions.template.yml",
+    "publications.bib",
+)
+
+
+def _git(root: Path, *args: str, timeout: float = 15) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def _commit_add_set(root: Path) -> list[str]:
+    """Repo-relative paths the editor manages, restricted to those that EXIST
+    (``git add`` errors on a missing path). Never ``git add -A``."""
+    rels: list[str] = []
+    data_dir = root / "data"
+    if data_dir.is_dir():
+        rels += sorted(f"data/{p.name}" for p in data_dir.glob("*.yml"))
+    for rel in _COMMIT_STATIC_PATHS:
+        if (root / rel).exists():
+            rels.append(rel)
+    return rels
+
+
+def _git_worktree_info(root: Path) -> dict:
+    """Cheap read for the index button: is ``root`` inside a git worktree, how
+    many editor-managed files are dirty, the current branch (None if detached).
+    Every failure degrades to a non-repo result so the button simply hides."""
+    blank = {"is_repo": False, "pending": 0, "branch": None, "detached": False}
+    try:
+        r = _git(root, "rev-parse", "--is-inside-work-tree")
+        if r.returncode != 0 or r.stdout.strip() != "true":
+            return blank
+        info = {"is_repo": True, "pending": 0, "branch": None, "detached": False}
+        add_set = _commit_add_set(root)
+        if add_set:
+            st = _git(root, "status", "--porcelain", "--", *add_set)
+            info["pending"] = sum(1 for line in st.stdout.splitlines() if line.strip())
+        b = _git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if b.returncode == 0:
+            info["branch"] = b.stdout.strip()
+        else:
+            info["detached"] = True
+        return info
+    except (OSError, subprocess.SubprocessError):
+        return blank
 
 
 @dataclass
@@ -320,9 +388,11 @@ def register_core_routes(app: Flask, deps: CoreDeps) -> None:
                         future_pending_count += 1
             except Exception as exc:
                 deps.logger.warning("index: future-date scan failed for %s: %s", key, exc)
+        git_status = _git_worktree_info(paths.data_root())
         return render_template(
             "index.html",
             sections=section_cards,
+            git_status=git_status,
             future_pending_count=future_pending_count,
             rebuild_needed=rebuild_needed,
             cv_pdf_exists=cv_pdf.exists(),
@@ -674,6 +744,90 @@ def register_core_routes(app: Flask, deps: CoreDeps) -> None:
         else:
             tail = result.stderr_tail or result.stdout_tail or "(no output)"
             flash(f"Build FAILED ({result.cmd}, exit {result.returncode}).\n{tail}", "warn")
+        return redirect(url_for("index"))
+
+    @app.route("/commit", methods=["POST"])
+    def commit_pending():
+        """Stage the editor-managed data files + a freshly-regenerated
+        publications.bib and make ONE local git commit in the workspace repo.
+
+        LOCAL only — never pushes (the private repo syncs its .git via Dropbox;
+        an installed-wheel consumer pushes on their own schedule). Every git
+        failure flashes and redirects rather than 500ing, covering: not a repo,
+        detached HEAD (a commit there is orphaned — refused), a running build
+        (lock busy), nothing staged, and an unset git identity."""
+        root = paths.data_root()
+        info = _git_worktree_info(root)
+        if not info["is_repo"]:
+            flash("Commit unavailable — the workspace is not a git repository.", "warn")
+            return redirect(url_for("index"))
+        if info["detached"]:
+            flash(
+                "Refusing to commit on a detached HEAD — a commit here would not be "
+                "on any branch and is easily lost. Check out a branch first.",
+                "warn",
+            )
+            return redirect(url_for("index"))
+
+        # Regenerate publications.bib in-process, cooperating with a running
+        # build via the shared lock (the generator's write is non-atomic). The
+        # lockfile's parent (output/) may not exist in a fresh workspace —
+        # create it first (mirrors build_lock_check.py) so acquire() can only
+        # ever raise Timeout, never FileNotFoundError.
+        try:
+            paths.output_dir().mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        lock = FileLock(str(build_runner.LOCK), timeout=0)
+        try:
+            lock.acquire()
+        except Timeout:
+            flash("A build is running; wait for it to finish, then commit.", "warn")
+            return redirect(url_for("index")), 409
+        try:
+            yaml_to_bibtex.main()
+        except Exception as exc:
+            deps.logger.exception("commit: publications.bib regen failed")
+            flash(f"Commit aborted — could not regenerate publications.bib: {exc}", "warn")
+            return redirect(url_for("index"))
+        finally:
+            lock.release()
+
+        add_set = _commit_add_set(root)
+        if not add_set:
+            flash("Nothing to commit — no editor-managed files found in the workspace.", "warn")
+            return redirect(url_for("index"))
+        try:
+            add = _git(root, "add", "--", *add_set, timeout=30)
+            if add.returncode != 0:
+                flash(f"Commit failed at `git add`: {(add.stderr or add.stdout).strip()}", "warn")
+                return redirect(url_for("index"))
+        except (OSError, subprocess.SubprocessError) as exc:
+            flash(f"Commit failed — could not run git add: {exc}", "warn")
+            return redirect(url_for("index"))
+
+        # Nothing staged (everything already committed) -> `git commit` would
+        # exit non-zero; report cleanly instead of surfacing a scary error.
+        if _git(root, "diff", "--cached", "--quiet").returncode == 0:
+            flash("Nothing to commit — your editor changes are already committed.", "ok")
+            return redirect(url_for("index"))
+
+        message = (request.form.get("message") or "").strip() or "Update CV data via editor"
+        c = _git(root, "commit", "-m", message, timeout=30)
+        if c.returncode != 0:
+            detail = (c.stderr or c.stdout).strip() or f"git exited {c.returncode}"
+            deps.logger.warning("commit: git commit failed: %s", detail)
+            flash(f"Commit failed: {detail}", "warn")
+            return redirect(url_for("index"))
+
+        head = _git(root, "rev-parse", "--short", "HEAD")
+        short = head.stdout.strip() if head.returncode == 0 else "?"
+        n = len(add_set)
+        flash(
+            f"Committed {short} on {info['branch']} — staged {n} editor "
+            f"file{'' if n == 1 else 's'}. Not pushed (sync/push separately).",
+            "ok",
+        )
         return redirect(url_for("index"))
 
     @app.route("/healthz")
