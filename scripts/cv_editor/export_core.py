@@ -268,6 +268,26 @@ def _entry_visible(
     return _visible(aud, hide, audience)
 
 
+# ----- public export API (stable names for out-of-package exporters) -----
+#
+# The underscored helpers above are the internal implementation used by this
+# module's own `build_*` formatters. An external consumer (e.g. a website JSON
+# exporter that reuses this engine's markup + leak-guard visibility logic)
+# should import these PUBLIC names instead of reaching for the private ones.
+# They are thin aliases — identical behaviour, a supported surface — so a future
+# refactor of the private internals can't silently break a downstream exporter.
+# Keep every name a downstream exporter depends on listed here.
+mk = _mk
+plain = _plain
+emphasis = _em
+strong = _strong
+sup = _sup
+link = _link
+self_bold_terms = _self_bold_terms
+visible = _visible
+entry_visible = _entry_visible
+
+
 # ----- dates (ports of render.typ format-date / format-month-year) -----
 
 
