@@ -70,6 +70,8 @@
       <option value="">Pick an action…</option>
       <option value="set_hidden">Mark as hidden</option>
       <option value="unset_hidden">Un-hide (show)</option>
+      <option value="set_web_show">Show on website</option>
+      <option value="set_web_hide">Hide from website</option>
       <option value="move_subsection">Move to subsection…</option>
     </select>
     <select name="target_subsection" id="bulk-target" hidden>
@@ -368,6 +370,8 @@
       const labels = {
         set_hidden: 'mark as hidden',
         unset_hidden: 'un-hide (show)',
+        set_web_show: 'show on the website',
+        set_web_hide: 'hide from the website',
         move_subsection: `move to "${targetSel.value}"`,
       };
       return confirm(`${labels[act]} ${n} entr${n === 1 ? 'y' : 'ies'}?`);

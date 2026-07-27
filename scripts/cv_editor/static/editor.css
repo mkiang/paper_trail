@@ -391,6 +391,12 @@ ol.authors li { margin-bottom: 0.1rem; }
 .rebuild-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .rebuild-bar form { display: inline; }
 
+/* commit-pending-edits bar (A6) */
+.commit-bar { display: flex; flex-direction: column; gap: 0.4rem; }
+.commit-form { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.commit-summary { flex: 1 1 auto; }
+.commit-message { flex: 0 1 22rem; min-width: 12rem; padding: 0.3rem 0.45rem; }
+
 /* open_access editor */
 .oa-editor { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.4rem; }
 .oa-row { display: flex; gap: 0.75rem; align-items: center; }

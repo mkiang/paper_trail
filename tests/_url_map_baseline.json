@@ -80,6 +80,11 @@
     "GET"
   ],
   [
+    "/commit",
+    "commit_pending",
+    "POST"
+  ],
+  [
     "/export/html",
     "export_html",
     "GET"
