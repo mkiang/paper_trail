@@ -170,6 +170,18 @@ class _NavState:
     entries: tuple[NavEntry, ...] = ()
     warned: set[str] = field(default_factory=set)
     collisions_checked: bool = False
+    # The ENGINE's own url rules, snapshotted by `_snapshot_engine_rules` at the end
+    # of `create_app()` — i.e. before any host has attached its routes. Without
+    # this, a host's own sub-pages are indistinguishable from engine pages, and the
+    # overlap check below warns about the most ordinary shape there is: a landing
+    # page with children under it.
+    engine_rules: frozenset[str] = frozenset()
+
+
+def _snapshot_engine_rules(app: Flask) -> None:
+    """Record which url rules belong to the ENGINE. Internal; call at the end of
+    ``create_app()``, before a host attaches anything."""
+    _state(app).engine_rules = frozenset(r.rule for r in app.url_map.iter_rules())
 
 
 def _state(app: Flask) -> _NavState:
@@ -286,9 +298,12 @@ def _warn_on_url_collisions(app: Flask, resolved: list[_ResolvedNav]) -> None:
     Direction 2 — a host url that is a path prefix of engine pages (a ``/qc``
     dashboard over ``/qc/report``): the host's link lights on the engine's page.
     """
-    host_paths = {r.match_path for r in resolved}
+    # ONLY the engine's own rules, snapshotted before the host attached anything.
+    # Using the live url map here would treat the host's own sub-pages as engine
+    # pages and warn about a landing page with children under it — the most
+    # ordinary host shape there is.
     engine_paths = sorted(
-        r.rule for r in app.url_map.iter_rules() if "<" not in r.rule and r.rule != "/"
+        rule for rule in _state(app).engine_rules if "<" not in rule and rule != "/"
     )
     for r in resolved:
         for prefix in sorted(reserved_keys()):
@@ -299,8 +314,6 @@ def _warn_on_url_collisions(app: Flask, resolved: list[_ResolvedNav]) -> None:
                     "— the engine's own nav entry will light on that page instead",
                 )
         for engine_path in engine_paths:
-            if engine_path.rstrip("/") in host_paths:
-                continue  # the host's own route, not an engine page
             if engine_path.startswith(r.match_path + "/"):
                 _warn_once(
                     app,

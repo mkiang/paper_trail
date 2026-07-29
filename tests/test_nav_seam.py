@@ -567,3 +567,53 @@ def test_the_doc_states_the_growable_reserved_set_and_the_append_semantics():
     assert "may grow in any minor release" in text.lower()
     assert "appends" in text, "batch semantics must be stated in one word"
     assert "current_section" in text, "the active-page obligation must be stated"
+
+
+# ---- host sub-pages are not engine pages ------------------------------------
+
+
+def test_a_host_landing_page_with_sub_pages_warns_about_nothing(caplog):
+    """Found by running the real host, not by reading the code.
+
+    The path-overlap warning walked the LIVE url map, so a host's own sub-pages
+    were indistinguishable from engine pages and the most ordinary host shape —
+    a landing page with children under it — logged a warning claiming its own
+    `/host/child` was "the engine page". The engine now compares against a
+    snapshot of its own rules taken before any host attached routes.
+    """
+    app = create_app()
+    app.config["TESTING"] = True
+
+    def _page():
+        from flask import render_template_string
+
+        return render_template_string("{% extends 'base.html' %}{% block content %}x{% endblock %}")
+
+    for rule, endpoint in (("/hostroot", "hostroot"), ("/hostroot/child", "hostchild")):
+        app.add_url_rule(rule, endpoint, _page)
+    nav.register_nav(app, [nav.NavEntry(key="hostroot", label="Host", endpoint="hostroot")])
+
+    with caplog.at_level(logging.WARNING):
+        assert app.test_client().get("/").status_code == 200
+    overlap = [r.getMessage() for r in caplog.records if "path prefix" in r.getMessage()]
+    assert not overlap, f"warned about the host's own sub-page: {overlap}"
+
+
+def test_an_entry_shadowing_a_real_engine_page_still_warns(caplog):
+    """The other half: the check must keep its teeth. `/qc` is a plausible host
+    dashboard path, and the engine really does serve /qc/report under it."""
+    app = create_app()
+    app.config["TESTING"] = True
+
+    def _page():
+        from flask import render_template_string
+
+        return render_template_string("{% extends 'base.html' %}{% block content %}x{% endblock %}")
+
+    app.add_url_rule("/qc", "host_qc", _page)
+    nav.register_nav(app, [nav.NavEntry(key="hostqc", label="QC", endpoint="host_qc")])
+    with caplog.at_level(logging.WARNING):
+        app.test_client().get("/")
+    assert any("path prefix" in r.getMessage() for r in caplog.records), (
+        "an entry over a real engine page must still warn"
+    )

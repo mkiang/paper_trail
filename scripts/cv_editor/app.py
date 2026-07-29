@@ -1594,4 +1594,8 @@ def create_app(data_dir=None, project_root=None) -> Flask:
             "capabilities": caps,
         }
 
+    # Record which url rules are the ENGINE's, before any host attaches its own.
+    # `nav`'s host/engine path-overlap warning needs the distinction, and the live
+    # url map cannot provide it after the fact.
+    nav._snapshot_engine_rules(app)
     return app
