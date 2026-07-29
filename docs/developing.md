@@ -67,6 +67,7 @@ Highlights of the module map:
 | Markdown / HTML export | `export_core.py`, `export_emit.py`, `markup_convert.py` |
 | Blank / example scaffolding + reset | `scaffold.py`, `example_build.py` |
 | Template capability gating | `capabilities.py` |
+| Host-contributed nav entries | `nav.py` (see `docs/extending.md`) |
 
 ## Load-bearing conventions
 

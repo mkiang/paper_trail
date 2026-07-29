@@ -163,6 +163,22 @@ def test_register_nav_rejects_a_non_iterable_batch():
         nav.register_nav(_app(), 42)
 
 
+def test_registering_an_empty_batch_is_a_no_op():
+    app = _app([])
+    assert nav._registered(app) == ()
+    with app.test_request_context("/"):
+        assert nav._resolve(app) == []
+
+
+def test_a_generator_batch_is_accepted_and_fully_consumed():
+    # The signature says Iterable, and a generator is consumed once into a tuple —
+    # so a second render cannot silently see an exhausted iterator.
+    app = _app()
+    nav.register_nav(app, (e for e in [nav.NavEntry(key="g", label="G", endpoint="index")]))
+    assert [e.key for e in nav._registered(app)] == ["g"]
+    assert [e.key for e in nav._registered(app)] == ["g"]
+
+
 def test_register_nav_rejects_a_duplicate_key_within_one_batch():
     with pytest.raises(ValueError, match="already registered"):
         nav.register_nav(
@@ -520,3 +536,34 @@ if __name__ == "__main__":
         html = _app().test_client().get("/").get_data(as_text=True)
         GOLDEN.write_text(_nav_block(html), encoding="utf-8")
         print(f"wrote {GOLDEN} ({GOLDEN.stat().st_size} bytes)")
+
+
+# ---- doc drift: the contract is only usable if the doc still states it -------
+
+
+DOC = ROOT / "docs" / "extending.md"
+
+
+def test_the_doc_names_every_committed_symbol():
+    """A renamed public symbol must not leave `docs/extending.md` silently stale —
+    the doc IS the contract for a host that cannot read our tests."""
+    text = DOC.read_text(encoding="utf-8")
+    for name in nav.__all__:
+        assert name in text, f"docs/extending.md does not mention {name}"
+
+
+def test_the_doc_does_not_resurrect_the_safe_url_framing():
+    """N1's checkpoint caught this claim in the module docstring: `safe_url` returns
+    '#' for anything without an http(s)/mailto scheme, so applying it to the nav
+    would blank every internal path. The doc must ground the endpoints-not-URLs
+    property in Werkzeug's rule check, and must say so only to warn against it."""
+    text = DOC.read_text(encoding="utf-8")
+    assert "Werkzeug refuses" in text, "the real grounding must be stated"
+    assert "not** the `safe_url`" in text, "the doc must warn off the safe_url framing"
+
+
+def test_the_doc_states_the_growable_reserved_set_and_the_append_semantics():
+    text = DOC.read_text(encoding="utf-8")
+    assert "may grow in any minor release" in text.lower()
+    assert "appends" in text, "batch semantics must be stated in one word"
+    assert "current_section" in text, "the active-page obligation must be stated"

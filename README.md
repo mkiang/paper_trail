@@ -76,11 +76,30 @@ public** — this tool has no built-in PII scanner. See `SECURITY.md` for the
 - [Typst](https://github.com/typst/typst) **0.15.x** (pinned in CI).
 - Python 3.11+ (editor + `./build.sh`).
 
+## Extending it from your own app
+
+You can wrap `create_app()`, attach your own Flask routes, and serve the result —
+the editor is a normal Flask app. `cv_editor.nav` lets those pages appear in the
+editor's nav without the engine knowing anything about them:
+
+```python
+from cv_editor.app import create_app
+from cv_editor.nav import NavEntry, register_nav
+
+app = create_app()
+register_nav(app, [NavEntry(key="reports", label="Reports", endpoint="reports_index")])
+```
+
+Entries carry an endpoint *name*, not a URL, so a host can never inject a raw
+`href`. Full contract — the committed surface, reserved keys, and what happens when
+an entry is malformed — in `docs/extending.md`.
+
 ## Contributing
 
 PRs welcome — this repository is the development home for the engine and the
-editor. See `CONTRIBUTING.md`, plus `docs/developing.md` (architecture) and
-`docs/capabilities.md` (per-template feature gating).
+editor. See `CONTRIBUTING.md`, plus `docs/developing.md` (architecture),
+`docs/capabilities.md` (per-template feature gating), and `docs/extending.md`
+(host-contributed nav entries).
 
 ## Built with Claude
 
