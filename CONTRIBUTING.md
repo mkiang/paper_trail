@@ -76,3 +76,29 @@ guarantee — review your own diffs for anything that should not be public.
 If you rename a CI job, update the required-status-check contexts in the branch
 protection settings in the same change. A renamed-but-still-required check never
 reports and will block every future merge until the settings are corrected.
+
+## Cutting a release
+
+Two files carry the version and **neither drives the other**:
+
+- `pyproject.toml` → the pip/wheel version
+- `typst.toml` → the `@local/paper-trail` Typst package version
+
+Bump both in the same commit, add a matching `## <version>` section to
+`CHANGELOG.md`, and let `tests/test_release_versions.py` check the three agree.
+Then tag the merge commit and push the tag:
+
+```bash
+git tag -a vX.Y.Z -m "vX.Y.Z: <summary>"
+git push origin vX.Y.Z
+```
+
+**Never move or delete a published tag.** A consumer's lockfile records
+`rev=<tag>#<commit-sha>`; moving the tag leaves the sha pointing at the old tree,
+so a re-sync installs stale code while every version check still reports agreement.
+Deleting a tag breaks any consumer rebuilding its environment from a clean
+checkout. If a published release is wrong, cut the next patch version.
+
+Note that CI runs on pushes to `main` and on pull requests, **not** on tag pushes —
+so the tag itself is never verified by CI. `tests/test_release_versions.py` checks
+the tag name only when run on a tagged commit locally.

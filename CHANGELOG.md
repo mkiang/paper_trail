@@ -3,6 +3,43 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.2
+
+Bug fixes in the nav seam's path-overlap warning. No API change.
+
+### Fixed
+
+- **The overlap warning no longer names an engine path that does not exist.** Its
+  basis was `reserved_keys()`, which also holds keys that ROUTES set explicitly
+  (`trackers`, `qc_triage`, ...). Those are nav keys, not path segments — there is
+  no engine rule at `/trackers`, and the engine never derives `trackers` from a
+  path — so a host page there was told the engine's link would take its highlight,
+  when in fact the host's own link was correctly current. The basis is now the exact
+  set the engine's derivation walks. This is the same defect class 1.2.1 fixed, in
+  the other half of the check.
+- **A missing rule snapshot is reported instead of silently skipping the check.**
+  An app not built by `create_app()`, or one whose `app.extensions` was cleared, got
+  no overlap warnings and no explanation — a silent false negative that looks like a
+  pass.
+- **A foreign value on the seam's `app.extensions` key is reported.** Replacing it
+  discards every registered entry and the snapshot, so the nav would quietly empty
+  out with a green test suite.
+- **The overlap check no longer latches on an empty first resolve**, and
+  `register_nav` re-arms it. Previously, a first request arriving before the host's
+  routes attached dropped every entry, latched the check, and it never ran again for
+  the life of the app; and an entry contributed by a later route module was never
+  checked at all.
+
+### Changed
+
+- `docs/extending.md` now states the three limits of the overlap warning (no exact
+  matches, no engine leaves, quiet under a `SCRIPT_NAME` mount), so silence is not
+  read as safety.
+- `CONTRIBUTING.md` gains a release checklist. The "never move a published tag" rule
+  previously existed only in a test docstring, and CI does not run on tag pushes;
+  `tests/test_release_versions.py` now also checks the tag name when run on a tagged
+  commit.
+
 ## 1.2.1
 
 Bug fix in 1.2.0's nav seam. No API change.
