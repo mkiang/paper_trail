@@ -100,10 +100,21 @@ def test_our_nav_keys_are_not_engine_reserved():
 
 **Paths** are not refused, because you own your own routes — but an overlap
 produces the same lie, so the engine logs a warning once per app when it sees one.
-Both directions matter. A host page under an engine prefix (`/service/notes`) gets
-the engine's own link lit instead of yours; a host entry that is a prefix of engine
-pages (a `/qc` dashboard over `/qc/report`) lights *your* link on the engine's page.
-Pick a path root the engine does not use.
+Both directions matter. A host page under a prefix the engine *derives* a section
+from (`/service/notes`) gets the engine's own link lit instead of yours; a host
+entry that is a path prefix of engine pages (a `/qc` dashboard over the engine's
+pages beneath `/qc`) lights *your* link on the engine's page. Pick a path root the
+engine does not use.
+
+Three limits on that warning, so you do not read silence as safety:
+
+- It cannot fire on an **exact** path match, or on an engine page with no children
+  beneath it. Most engine routes are such leaves.
+- Under a `SCRIPT_NAME`/`APPLICATION_ROOT` mount it goes quiet, because resolved
+  URLs carry the mount prefix and the engine's own rules do not.
+- It needs the rule snapshot `create_app()` takes. If you build the app some other
+  way, or clear `app.extensions`, the engine says so rather than checking nothing
+  silently.
 
 ## What happens when something is wrong
 

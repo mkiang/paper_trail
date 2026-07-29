@@ -52,7 +52,7 @@ def _tools_details(body: str) -> str:
 # resolved. Note it points at `index` (url "/"), which `_resolve` REFUSES at render
 # time — see test_an_entry_resolving_to_the_root_url_is_refused. Render tests use
 # `_host_app` and its /hostpage endpoint instead.
-CURATION = nav.NavEntry(key="curation", label="Curation", endpoint="index")
+REPORTS = nav.NavEntry(key="reports", label="Reports", endpoint="index")
 
 
 # ---- the byte-identity guarantee: an unused seam costs zero bytes ----------
@@ -79,6 +79,12 @@ def test_nav_with_nothing_registered_matches_the_golden():
         "nav markup drifted with no host entries registered. If intentional:\n"
         "  python tests/test_nav_seam.py --regenerate-golden"
     )
+
+
+def _plain_page():
+    from flask import render_template_string
+
+    return render_template_string("{% extends 'base.html' %}{% block content %}x{% endblock %}")
 
 
 def _host_app(entries, path="/hostpage"):
@@ -110,10 +116,10 @@ def _host_app(entries, path="/hostpage"):
 # these 500ed every page under the first draft's resolver, which unpacked
 # `(key, label, endpoint)` in the `for` header, outside its own try.
 _NON_ENTRY = [
-    ("two_tuple", ("curation", "Curation")),
-    ("four_tuple", ("curation", "Curation", "index", "extra")),
-    ("bare_string", "curation"),
-    ("dict", {"key": "curation"}),
+    ("two_tuple", ("reports", "Reports")),
+    ("four_tuple", ("reports", "Reports", "index", "extra")),
+    ("bare_string", "reports"),
+    ("dict", {"key": "reports"}),
     ("none", None),
 ]
 
@@ -128,13 +134,13 @@ def test_register_nav_rejects_a_non_entry(name, entry):
 # traceback lands on the host's own construction site rather than its register_nav
 # call. Factories, not values: building these at module scope would raise at import.
 _BAD_FIELDS = [
-    ("endpoint_none", lambda: nav.NavEntry(key="curation", label="Curation", endpoint=None)),
-    ("endpoint_int", lambda: nav.NavEntry(key="curation", label="Curation", endpoint=7)),
-    ("empty_label", lambda: nav.NavEntry(key="curation", label="", endpoint="index")),
-    ("blank_key", lambda: nav.NavEntry(key="   ", label="Curation", endpoint="index")),
-    ("padded_key", lambda: nav.NavEntry(key=" curation ", label="Curation", endpoint="index")),
-    ("padded_label", lambda: nav.NavEntry(key="curation", label="Curation ", endpoint="index")),
-    ("relative_endpoint", lambda: nav.NavEntry(key="curation", label="C", endpoint=".page")),
+    ("endpoint_none", lambda: nav.NavEntry(key="reports", label="Reports", endpoint=None)),
+    ("endpoint_int", lambda: nav.NavEntry(key="reports", label="Reports", endpoint=7)),
+    ("empty_label", lambda: nav.NavEntry(key="reports", label="", endpoint="index")),
+    ("blank_key", lambda: nav.NavEntry(key="   ", label="Reports", endpoint="index")),
+    ("padded_key", lambda: nav.NavEntry(key=" reports ", label="Reports", endpoint="index")),
+    ("padded_label", lambda: nav.NavEntry(key="reports", label="Reports ", endpoint="index")),
+    ("relative_endpoint", lambda: nav.NavEntry(key="reports", label="C", endpoint=".page")),
 ]
 
 
@@ -155,7 +161,7 @@ def test_a_padded_key_is_refused_rather_than_silently_dead():
 def test_nav_entry_is_keyword_only():
     # Field order must never become contractual.
     with pytest.raises(TypeError):
-        nav.NavEntry("curation", "Curation", "index")
+        nav.NavEntry("reports", "Reports", "index")
 
 
 def test_register_nav_rejects_a_non_iterable_batch():
@@ -182,7 +188,7 @@ def test_a_generator_batch_is_accepted_and_fully_consumed():
 def test_register_nav_rejects_a_duplicate_key_within_one_batch():
     with pytest.raises(ValueError, match="already registered"):
         nav.register_nav(
-            _app(), [CURATION, nav.NavEntry(key="curation", label="Other", endpoint="index")]
+            _app(), [REPORTS, nav.NavEntry(key="reports", label="Other", endpoint="index")]
         )
 
 
@@ -198,7 +204,7 @@ def test_reserved_keys_covers_sections_and_engine_nav_keys():
     reserved = nav.reserved_keys()
     assert {"publications", "meta"} <= reserved, "CV section names must be reserved"
     assert {"style", "trackers", "validate", "reset"} <= reserved, "engine nav keys too"
-    assert "curation" not in reserved
+    assert "reports" not in reserved
 
 
 def test_reserved_keys_covers_every_current_section_literal_in_the_engine():
@@ -234,8 +240,8 @@ def test_the_public_surface_is_exactly_three_names():
 def test_register_nav_appends_rather_than_replacing():
     """A host decomposed into several route modules registers once per module. The
     first draft REBOUND the tuple, so only the last call's batch survived — silently,
-    with no error, no log and no test. The sole real consumer is three route modules,
-    so it was one refactor away from losing entries."""
+    with no error, no log and no test — so any host that grows a second route
+    module is one refactor away from losing entries."""
     app = _app()
     nav.register_nav(app, [nav.NavEntry(key="one", label="One", endpoint="index")])
     nav.register_nav(app, [nav.NavEntry(key="two", label="Two", endpoint="index")])
@@ -260,7 +266,7 @@ def test_a_rejected_batch_leaves_earlier_entries_intact():
 def test_a_rejected_batch_does_not_partially_register():
     app = _app()
     with pytest.raises(ValueError):
-        nav.register_nav(app, [CURATION, nav.NavEntry(key="meta", label="Bad", endpoint="index")])
+        nav.register_nav(app, [REPORTS, nav.NavEntry(key="meta", label="Bad", endpoint="index")])
     assert nav._registered(app) == (), "validation must complete before anything is stored"
 
 
@@ -268,20 +274,20 @@ def test_a_rejected_batch_does_not_partially_register():
 
 
 def test_a_registered_entry_renders_in_the_tools_menu():
-    app = _host_app([nav.NavEntry(key="curation", label="Curation", endpoint="hostpage")])
+    app = _host_app([nav.NavEntry(key="reports", label="Reports", endpoint="hostpage")])
     block = _nav_block(app.test_client().get("/").get_data(as_text=True))
-    assert ">Curation</a>" in block
+    assert ">Reports</a>" in block
     assert 'href="/hostpage"' in block
 
 
 def test_an_entry_resolving_to_the_root_url_is_refused(caplog):
     # A url of "/" prefix-matches every path, so it would mark its key current on
     # every page in the app. Refused at resolution and logged.
-    app = _app([CURATION])  # endpoint `index` -> "/"
+    app = _app([REPORTS])  # endpoint `index` -> "/"
     with caplog.at_level(logging.WARNING):
         resp = app.test_client().get("/")
     assert resp.status_code == 200
-    assert "Curation" not in _nav_block(resp.get_data(as_text=True))
+    assert "Reports" not in _nav_block(resp.get_data(as_text=True))
     assert any("root url" in r.getMessage() for r in caplog.records)
 
 
@@ -289,7 +295,7 @@ def test_registration_order_relative_to_routes_does_not_matter():
     # `_host_app` registers the nav AFTER adding its route; do the reverse here.
     app = create_app()
     app.config["TESTING"] = True
-    nav.register_nav(app, [nav.NavEntry(key="curation", label="Curation", endpoint="hostpage")])
+    nav.register_nav(app, [nav.NavEntry(key="reports", label="Reports", endpoint="hostpage")])
 
     @app.route("/hostpage")
     def hostpage():
@@ -303,21 +309,21 @@ def test_registration_order_relative_to_routes_does_not_matter():
 
 
 def test_an_unbuildable_endpoint_is_dropped_without_a_500(caplog):
-    app = _app([nav.NavEntry(key="curation", label="Curation", endpoint="no_such_endpoint")])
+    app = _app([nav.NavEntry(key="reports", label="Reports", endpoint="no_such_endpoint")])
     with caplog.at_level(logging.WARNING):
         resp = app.test_client().get("/")
     assert resp.status_code == 200
-    assert "Curation" not in _nav_block(resp.get_data(as_text=True))
+    assert "Reports" not in _nav_block(resp.get_data(as_text=True))
     assert any("no_such_endpoint" in r.getMessage() for r in caplog.records)
 
 
 def test_a_parameterised_endpoint_is_dropped_without_a_500(caplog):
     # `section_list` needs a <section>, so url_for() with no args raises BuildError.
-    app = _app([nav.NavEntry(key="curation", label="Curation", endpoint="section_list")])
+    app = _app([nav.NavEntry(key="reports", label="Reports", endpoint="section_list")])
     with caplog.at_level(logging.WARNING):
         resp = app.test_client().get("/")
     assert resp.status_code == 200
-    assert "Curation" not in _nav_block(resp.get_data(as_text=True))
+    assert "Reports" not in _nav_block(resp.get_data(as_text=True))
     # The logging half of the contract, which this test previously opened caplog
     # for and then never asserted — it would have passed with the warn deleted.
     assert any("section_list" in r.getMessage() for r in caplog.records)
@@ -329,7 +335,7 @@ def test_a_non_str_url_is_dropped_without_a_500(caplog):
     passed the old `len(url) < 2` guard, and the fallback's `r.url.rstrip(...)` then
     raised AttributeError OUT of the context processor — 500ing all 25 templates
     that extend base.html, `/` included. Reproduced before the fix."""
-    app = _app([nav.NavEntry(key="curation", label="Curation", endpoint="no_such_endpoint")])
+    app = _app([nav.NavEntry(key="reports", label="Reports", endpoint="no_such_endpoint")])
     app.url_build_error_handlers.append(lambda error, endpoint, values: ["not", "a", "string"])
     with caplog.at_level(logging.WARNING):
         resp = app.test_client().get("/")
@@ -340,7 +346,7 @@ def test_a_non_str_url_is_dropped_without_a_500(caplog):
 def test_an_unbuildable_endpoint_logs_once_not_once_per_request(caplog):
     # The log is a real file on disk; a permanently-broken entry must not append a
     # line on every request forever.
-    app = _app([nav.NavEntry(key="curation", label="Curation", endpoint="no_such_endpoint")])
+    app = _app([nav.NavEntry(key="reports", label="Reports", endpoint="no_such_endpoint")])
     client = app.test_client()
     with caplog.at_level(logging.WARNING):
         client.get("/")
@@ -363,7 +369,7 @@ def test_a_resolver_that_raises_does_not_500_the_editor(caplog, monkeypatch):
         raise RuntimeError("host resolver exploded")
 
     monkeypatch.setattr(nav, "_resolve", boom)
-    app = _app([CURATION])
+    app = _app([REPORTS])
     with caplog.at_level(logging.ERROR):
         resp = app.test_client().get("/")
     assert resp.status_code == 200
@@ -372,12 +378,12 @@ def test_a_resolver_that_raises_does_not_500_the_editor(caplog, monkeypatch):
 
 
 def test_resolve_outside_a_request_context_is_empty():
-    assert nav._resolve(_app([CURATION])) == []
+    assert nav._resolve(_app([REPORTS])) == []
 
 
 def test_a_label_is_autoescaped():
     app = _host_app(
-        [nav.NavEntry(key="curation", label="<script>alert(1)</script>", endpoint="hostpage")]
+        [nav.NavEntry(key="reports", label="<script>alert(1)</script>", endpoint="hostpage")]
     )
     block = _nav_block(app.test_client().get("/").get_data(as_text=True))
     assert "<script>alert(1)</script>" not in block
@@ -416,15 +422,15 @@ def test_tools_summary_is_current_on_every_tools_page(path, key):
 
 
 def test_the_current_section_fallback_marks_a_host_page_current():
-    app = _host_app([nav.NavEntry(key="curation", label="Curation", endpoint="hostpage")])
+    app = _host_app([nav.NavEntry(key="reports", label="Reports", endpoint="hostpage")])
     block = _nav_block(app.test_client().get("/hostpage").get_data(as_text=True))
-    assert '>Curation</a>' in block
+    assert '>Reports</a>' in block
     assert 'class="is-current"' in block
     assert 'aria-current="page"' in block
 
 
 def test_the_fallback_also_matches_a_host_subpath():
-    app = _host_app([nav.NavEntry(key="curation", label="Curation", endpoint="hostpage")])
+    app = _host_app([nav.NavEntry(key="reports", label="Reports", endpoint="hostpage")])
 
     @app.route("/hostpage/deeper")
     def deeper():
@@ -467,13 +473,13 @@ def test_an_encoded_url_still_matches_the_decoded_request_path():
 def test_a_host_entry_also_lights_the_tools_summary():
     # The `tools_keys` union. Without it the link works but its menu never shows
     # as active — the one silent-degradation case for a host entry.
-    app = _host_app([nav.NavEntry(key="curation", label="Curation", endpoint="hostpage")])
+    app = _host_app([nav.NavEntry(key="reports", label="Reports", endpoint="hostpage")])
     body = app.test_client().get("/hostpage").get_data(as_text=True)
     assert "is-current" in _tools_details(body)
 
 
 def test_a_host_entry_does_not_light_the_tools_summary_on_an_engine_page():
-    app = _host_app([nav.NavEntry(key="curation", label="Curation", endpoint="hostpage")])
+    app = _host_app([nav.NavEntry(key="reports", label="Reports", endpoint="hostpage")])
     body = app.test_client().get("/education").get_data(as_text=True)
     assert "is-current" not in _tools_details(body)
 
@@ -616,4 +622,106 @@ def test_an_entry_shadowing_a_real_engine_page_still_warns(caplog):
         app.test_client().get("/")
     assert any("path prefix" in r.getMessage() for r in caplog.records), (
         "an entry over a real engine page must still warn"
+    )
+
+
+# ---- the overlap check must not lie, and must not go quiet ------------------
+
+
+def test_a_host_page_under_an_explicit_nav_key_does_not_warn(caplog):
+    """N6 checkpoint. 1.2.1 fixed one false-positive family and left another.
+
+    The direction-1 basis was `reserved_keys()`, which also holds keys that ROUTES
+    pass explicitly (`trackers`, `qc_triage`, …). Those are nav keys, not path
+    segments: there is no engine rule at `/trackers`, and `inject_helpers` never
+    derives `trackers` from a path. So a host page there was told it "sits under
+    the engine path /trackers" and that the engine's link "will light on that page
+    instead" — both false, and the host's own link was in fact `is-current`.
+    """
+    app = create_app()
+    app.config["TESTING"] = True
+    app.add_url_rule("/trackers", "hosttrackers", _plain_page)
+    nav.register_nav(app, [nav.NavEntry(key="hosttrackers", label="Host", endpoint="hosttrackers")])
+    assert not any(
+        r.rule == "/trackers" for r in app.url_map.iter_rules() if r.endpoint != "hosttrackers"
+    )
+    with caplog.at_level(logging.WARNING):
+        body = app.test_client().get("/trackers").get_data(as_text=True)
+    assert not [r.getMessage() for r in caplog.records if "sits under" in r.getMessage()]
+    i = body.find(">Host</a>")
+    assert 'aria-current="page"' in body[body.rfind("<a", 0, i) : i], "the host link IS current"
+
+
+def test_a_host_page_under_a_derived_section_still_warns(caplog):
+    # The other half: /service really is derived from the path, and the engine's
+    # link really does steal the highlight, so this must keep its teeth.
+    app = create_app()
+    app.config["TESTING"] = True
+    app.add_url_rule("/service/notes", "hostnotes", _plain_page)
+    nav.register_nav(app, [nav.NavEntry(key="hostnotes", label="Host", endpoint="hostnotes")])
+    with caplog.at_level(logging.WARNING):
+        app.test_client().get("/service/notes")
+    assert any("derives its own current_section" in r.getMessage() for r in caplog.records)
+
+
+def test_a_missing_engine_snapshot_is_reported_not_silently_skipped(caplog):
+    """Without this, an app not built by `create_app()` (or one whose extensions
+    were cleared) gets NO overlap warnings and no explanation — a silent false
+    negative, which is worse than the false positive 1.2.1 removed because it
+    still looks like the check ran."""
+    app = create_app()
+    app.config["TESTING"] = True
+    app.add_url_rule("/qc", "host_qc", _plain_page)
+    app.extensions.clear()
+    nav.register_nav(app, [nav.NavEntry(key="hostqc", label="QC", endpoint="host_qc")])
+    with caplog.at_level(logging.WARNING):
+        app.test_client().get("/")
+    assert any("no engine url-rule snapshot" in r.getMessage() for r in caplog.records)
+
+
+def test_a_foreign_value_on_the_extensions_key_is_reported(caplog):
+    """Replacing it discards every registered entry and the snapshot. That must not
+    be silent — the nav would simply empty out with a green suite."""
+    app = create_app()
+    app.config["TESTING"] = True
+    nav.register_nav(app, [nav.NavEntry(key="reports", label="Reports", endpoint="index")])
+    app.extensions["cv_editor_nav"] = {"someone": "else"}
+    with caplog.at_level(logging.WARNING):
+        assert nav._registered(app) == ()
+    assert any("not the seam's own state" in r.getMessage() for r in caplog.records)
+
+
+def test_the_overlap_check_is_not_latched_by_an_empty_first_resolve():
+    """It runs once per app. If the first request lands before the host's routes
+    attach, every entry is dropped, `resolved` is empty, and latching there meant
+    the check never ran again for the life of the app — silently.
+
+    Asserted on the latch itself rather than end-to-end, because Flask forbids
+    `add_url_rule` after the first request, so the "routes attach later" shape
+    cannot be staged through the test client.
+    """
+    app = create_app()
+    app.config["TESTING"] = True
+    nav.register_nav(app, [nav.NavEntry(key="hostqc", label="QC", endpoint="never_registered")])
+    app.test_client().get("/")  # entry drops -> nothing resolved
+    assert nav._state(app).collisions_checked is False, "an empty resolve must not latch the check"
+
+
+def test_an_entry_registered_after_the_first_request_is_still_checked(caplog):
+    app = create_app()
+    app.config["TESTING"] = True
+    app.add_url_rule("/qc", "host_qc", _plain_page)
+    nav.register_nav(app, [nav.NavEntry(key="first", label="First", endpoint="urls_verify_view")])
+    app.test_client().get("/")  # latches on the first entry
+    nav.register_nav(app, [nav.NavEntry(key="hostqc", label="QC", endpoint="host_qc")])
+    with caplog.at_level(logging.WARNING):
+        app.test_client().get("/")
+    assert any("path prefix of the engine page" in r.getMessage() for r in caplog.records)
+
+
+def test_derivable_prefixes_are_a_strict_subset_of_reserved_keys():
+    derivable, reserved = nav._derivable_path_prefixes(), nav.reserved_keys()
+    assert derivable < reserved, "the overlap basis must be narrower than the key basis"
+    assert not (derivable & set(nav._EXPLICIT_NAV_KEYS)), (
+        "explicitly-passed keys are not path segments and must not be an overlap basis"
     )

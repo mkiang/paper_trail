@@ -111,6 +111,18 @@ def reserved_keys() -> frozenset[str]:
     )
 
 
+def _derivable_path_prefixes() -> frozenset[str]:
+    """First path segments ``inject_helpers`` derives a ``current_section`` from.
+
+    A STRICT SUBSET of ``reserved_keys()``: it excludes ``_EXPLICIT_NAV_KEYS``,
+    which routes pass as a kwarg and which no path produces. Used only by the
+    path-overlap warning, so that warning cannot name a nonexistent engine path.
+    """
+    from cv_editor import schemas
+
+    return frozenset(schemas.SCHEMAS) | frozenset(_PATH_DERIVED_NAV_KEYS)
+
+
 @dataclass(frozen=True, kw_only=True)
 class NavEntry:
     """One host-contributed nav destination.
@@ -187,6 +199,18 @@ def _snapshot_engine_rules(app: Flask) -> None:
 def _state(app: Flask) -> _NavState:
     st = app.extensions.get(_EXT_KEY)
     if not isinstance(st, _NavState):
+        if st is not None:
+            # Something else is occupying our key — a host squatting it, a test
+            # helper, a future engine storing something different. Replacing it
+            # discards every registered entry AND the engine-rule snapshot, so the
+            # nav would just empty out. Say so; a silent drop is the failure this
+            # module exists to remove, not one to add.
+            app.logger.warning(
+                "nav: app.extensions[%r] held a %s, not the seam's own state — "
+                "replacing it, and any registered entries are lost",
+                _EXT_KEY,
+                type(st).__name__,
+            )
         st = _NavState()
         app.extensions[_EXT_KEY] = st
     return st
@@ -231,6 +255,10 @@ def register_nav(app: Flask, entries: Iterable[NavEntry]) -> None:
     # Extend only after the whole batch validates, so a bad batch leaves the
     # previously registered entries untouched.
     st.entries = st.entries + tuple(items)
+    # Re-arm the path-overlap check. It runs once per app, and a host decomposed
+    # into route modules may register after the first request has already been
+    # served; without this, a late entry is never checked.
+    st.collisions_checked = False
 
 
 def _registered(app: Flask) -> tuple[NavEntry, ...]:
@@ -279,7 +307,12 @@ def _resolve(app: Flask) -> list[_ResolvedNav]:
             continue
         out.append(_ResolvedNav(entry.key, entry.label, url, unquote(url).rstrip("/") or "/"))
     out.sort(key=lambda r: len(r.match_path), reverse=True)
-    if not st.collisions_checked:
+    # Latch only once something actually resolved. If the first request lands
+    # before the host's routes attach, every entry is dropped, `out` is empty, and
+    # latching here would mean the collision check never runs for the life of the
+    # app — silently. `register_nav` also clears the latch when it appends, so an
+    # entry contributed by a later route module still gets checked.
+    if out and not st.collisions_checked:
         st.collisions_checked = True
         _warn_on_url_collisions(app, out)
     return out
@@ -293,25 +326,51 @@ def _warn_on_url_collisions(app: Flask, resolved: list[_ResolvedNav]) -> None:
     — the host owns its own routes — so it is reported instead. Computed once per
     app, on the first resolve, because it walks the url map.
 
-    Direction 1 — a host page under an engine prefix (``/service/notes``): the
-    engine's derivation runs FIRST and lights its own link on the host's page.
+    Direction 1 — a host page under a prefix the engine DERIVES a section from
+    (``/service/notes``): ``inject_helpers`` runs its derivation first and lights
+    the engine's own link on the host's page. The basis is deliberately the exact
+    set that derivation walks — the CV section names plus
+    ``_PATH_DERIVED_NAV_KEYS`` — and NOT ``reserved_keys()``, which also contains
+    keys routes set explicitly (``trackers``, ``qc_triage``, …). Those are nav keys,
+    not path segments: there is no engine rule at ``/trackers``, and the derivation
+    never produces ``trackers`` from a path, so warning about a host page there
+    named an engine path that does not exist and predicted a theft that does not
+    happen. Reported at N6's checkpoint, having survived the 1.2.1 fix.
+
     Direction 2 — a host url that is a path prefix of engine pages (a ``/qc``
-    dashboard over ``/qc/report``): the host's link lights on the engine's page.
+    dashboard over the engine's pages beneath ``/qc``): the host's link lights on
+    the engine's page. Which page gets named is whichever sorts first; do not rely
+    on a particular one.
+
+    Neither half can fire on an EXACT path match or on an engine leaf with no
+    children, so silence here is not evidence of no overlap.
     """
     # ONLY the engine's own rules, snapshotted before the host attached anything.
     # Using the live url map here would treat the host's own sub-pages as engine
     # pages and warn about a landing page with children under it — the most
     # ordinary host shape there is.
-    engine_paths = sorted(
-        rule for rule in _state(app).engine_rules if "<" not in rule and rule != "/"
-    )
+    engine_rules = _state(app).engine_rules
+    if not engine_rules:
+        # Empty means `create_app()` never ran `_snapshot_engine_rules` on this app
+        # (built some other way, or `app.extensions` was cleared). Direction 2 would
+        # then be a no-op that LOOKS like it passed — a silent false negative, worse
+        # than the false positive 1.2.1 removed. Say so instead.
+        _warn_once(
+            app,
+            "nav: no engine url-rule snapshot on this app, so host/engine path "
+            "overlaps cannot be checked — was it built by create_app()?",
+        )
+        return
+    engine_paths = sorted(rule for rule in engine_rules if "<" not in rule and rule != "/")
+    derived_prefixes = sorted(_derivable_path_prefixes())
     for r in resolved:
-        for prefix in sorted(reserved_keys()):
+        for prefix in derived_prefixes:
             if r.match_path == f"/{prefix}" or r.match_path.startswith(f"/{prefix}/"):
                 _warn_once(
                     app,
-                    f"nav: entry {r.key!r} at {r.url!r} sits under the engine path /{prefix} "
-                    "— the engine's own nav entry will light on that page instead",
+                    f"nav: entry {r.key!r} at {r.url!r} sits under /{prefix}, which the "
+                    "engine derives its own current_section from — the engine's link "
+                    "will light on that page instead of yours",
                 )
         for engine_path in engine_paths:
             if engine_path.startswith(r.match_path + "/"):
