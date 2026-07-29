@@ -60,6 +60,7 @@ from ruamel.yaml.comments import CommentedMap
 from cv_editor import (
     altmetric_tracker_cache,
     capabilities,
+    nav,
     notes_helpers,
     paths,
     schemas,
@@ -1524,6 +1525,16 @@ def create_app(data_dir=None, project_root=None) -> Flask:
 
     @app.context_processor
     def inject_helpers():
+        # 1.2.0 nav seam: host-contributed entries, resolved to URLs. `resolve`
+        # is documented not to raise, and this belt-and-braces catch is where the
+        # damage WOULD land — a raise here 500s all 25 templates that extend
+        # base.html, `/` included, which is the only recovery surface.
+        try:
+            extra_nav = nav.resolve(app)
+        except Exception:  # a host bug must not take down every page
+            app.logger.exception("nav: resolving host-contributed entries failed")
+            extra_nav = []
+
         # current_section: best-effort guess of which nav item is active.
         # Routes use either `section` (URL converter) or a literal key
         # we infer from request.path.
@@ -1540,10 +1551,21 @@ def create_app(data_dir=None, project_root=None) -> Flask:
                     break
         if section is None and path.startswith("/publications/trackers"):
             section = "trackers"
+        if section is None:
+            # Host entries, matched on their OWN resolved url — the engine never
+            # matches a literal host path. `extra_nav` is longest-url-first, so a
+            # host registering both /ext and /ext/orcid resolves the sub-page to
+            # the sub-page. A host route that passes `current_section` explicitly
+            # (the common case) never reaches this fallback.
+            for r in extra_nav:
+                if path == r.url or path.startswith(r.url.rstrip("/") + "/"):
+                    section = r.key
+                    break
         # T3.6: centralize TRACKER_HOSTS — JS reads from this single source.
         return {
             "messages": get_flashed_messages(with_categories=True),
             "current_section": section,
+            "extra_nav": extra_nav,
             "tracker_hosts": sorted(url_helpers.TRACKER_HOSTS),
             # P5: templates branch on capabilities to hide nav links + in-page
             # UI for features whose routes aren't registered (so url_for can't
