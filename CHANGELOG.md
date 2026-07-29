@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.1
+
+Bug fix in 1.2.0's nav seam. No API change.
+
+### Fixed
+
+- **The host/engine path-overlap warning no longer fires on a host's own
+  sub-pages.** `cv_editor.nav` warns when a host nav entry's URL overlaps an
+  engine path, because that makes the nav highlight the wrong link. The check
+  walked the LIVE url map, so it could not tell a host's own routes from the
+  engine's — and the most ordinary host shape, a landing page with children
+  under it, logged a warning naming the host's own sub-page as "the engine
+  page". `create_app()` now snapshots the engine's rules before any host
+  attaches routes, and the check compares against that. Found by running a real
+  host, not by reading the code.
+
 ## 1.2.0
 
 Additive release adding a host-extension seam for nav entries. No breaking
