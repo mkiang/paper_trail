@@ -1525,16 +1525,6 @@ def create_app(data_dir=None, project_root=None) -> Flask:
 
     @app.context_processor
     def inject_helpers():
-        # 1.2.0 nav seam: host-contributed entries, resolved to URLs. `resolve`
-        # is documented not to raise, and this belt-and-braces catch is where the
-        # damage WOULD land — a raise here 500s all 25 templates that extend
-        # base.html, `/` included, which is the only recovery surface.
-        try:
-            extra_nav = nav.resolve(app)
-        except Exception:  # a host bug must not take down every page
-            app.logger.exception("nav: resolving host-contributed entries failed")
-            extra_nav = []
-
         # current_section: best-effort guess of which nav item is active.
         # Routes use either `section` (URL converter) or a literal key
         # we infer from request.path.
@@ -1545,22 +1535,52 @@ def create_app(data_dir=None, project_root=None) -> Flask:
                 section = key
                 break
         if section is None:
-            for nav_key in ("style", "freeze", "search", "urls", "citations", "pubmed_sync"):
+            for nav_key in nav._PATH_DERIVED_NAV_KEYS:
                 if path == f"/{nav_key}" or path.startswith(f"/{nav_key}/"):
                     section = nav_key
                     break
         if section is None and path.startswith("/publications/trackers"):
             section = "trackers"
-        if section is None:
-            # Host entries, matched on their OWN resolved url — the engine never
-            # matches a literal host path. `extra_nav` is longest-url-first, so a
-            # host registering both /ext and /ext/orcid resolves the sub-page to
-            # the sub-page. A host route that passes `current_section` explicitly
-            # (the common case) never reaches this fallback.
-            for r in extra_nav:
-                if path == r.url or path.startswith(r.url.rstrip("/") + "/"):
-                    section = r.key
-                    break
+
+        # 1.2.0 nav seam: host-contributed entries, resolved to URLs. `_resolve` is
+        # documented not to raise, and this belt-and-braces catch is where the
+        # damage WOULD land — a raise here 500s all 25 templates that extend
+        # base.html, `/` included, which is the only recovery surface.
+        #
+        # The MATCHING below sits inside the same try as defence in depth, NOT as
+        # the fix for anything demonstrated. N1's checkpoint found a real escape
+        # here — `url_for` can return a non-str via a host's
+        # `url_build_error_handler`, and the matcher's attribute access then raised
+        # AttributeError out of this processor (reproduced) — but what closes that
+        # is `nav._resolve`'s `isinstance(url, str)` guard. Given the guard,
+        # `match_path` is always a str on a frozen dataclass, so this block cannot
+        # raise: mutating it back out of the try leaves the suite green (measured).
+        # Kept anyway, because a future field or matcher change would not be so safe.
+        try:
+            extra_nav = nav._resolve(app)
+            if section is None:
+                # Host entries, matched on their OWN resolved path — the engine
+                # never matches a literal host path. `extra_nav` is longest-first,
+                # so a host registering both /reports and /reports/monthly resolves
+                # the sub-page to the sub-page. `match_path` is decoded and
+                # slash-normalised; `script_root` is added back because `url_for`
+                # includes it while `request.path` does not. A host route passing
+                # `current_section` explicitly never reaches this fallback.
+                mounted = ((request.script_root if request else "") + path).rstrip("/") or "/"
+                for r in extra_nav:
+                    if mounted == r.match_path or mounted.startswith(r.match_path + "/"):
+                        section = r.key
+                        break
+        except Exception:  # a host bug must not take down every page
+            _nav_failure_logged = app.extensions.setdefault("cv_editor_nav_failed", [])
+            if not _nav_failure_logged:
+                # Log the traceback ONCE. A persistent failure would otherwise
+                # append a full traceback to the real log file on every request.
+                _nav_failure_logged.append(True)
+                app.logger.exception("nav: resolving host-contributed entries failed")
+            else:
+                app.logger.warning("nav: resolving host-contributed entries failed again")
+            extra_nav = []
         # T3.6: centralize TRACKER_HOSTS — JS reads from this single source.
         return {
             "messages": get_flashed_messages(with_categories=True),

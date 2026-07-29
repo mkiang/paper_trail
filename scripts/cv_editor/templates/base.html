@@ -48,7 +48,7 @@
       {% endfor %}
 
       {% set more_keys = MORE | map(attribute=0) | list %}
-      {% set tools_keys = TOOLS | map(attribute=0) | list + extra_nav | map(attribute='key') | list %}
+      {% set tools_keys = (TOOLS | map(attribute=0) | list) + (extra_nav | map(attribute='key') | list) %}
       <details class="nav-menu {% if current_section in more_keys %}is-current{% endif %}">
         <summary aria-label="More sections">More <span class="caret" aria-hidden="true">&#9662;</span></summary>
         <div class="nav-menu-panel">
