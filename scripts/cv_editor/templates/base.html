@@ -24,12 +24,23 @@
         ('appointments', 'Appointments'),
         ('meta', 'Meta'),
       ] %}
+      {#- TOOLS is NOT a render source — the Tools panel below is hand-written.
+         This list exists only to compute `tools_keys`, i.e. which
+         `current_section` values light up the "Tools" summary. It must therefore
+         name EVERY key the panel can be current for; five were missing (their
+         routes set `current_section` explicitly, so the panel's own links
+         highlighted while its summary did not). #}
       {% set TOOLS = [
         ('style', 'Style'),
         ('freeze', 'Freeze'),
         ('urls', 'URLs'),
         ('trackers', 'Trackers'),
         ('citations', 'Citations'),
+        ('pubmed_sync', 'PubMed sync'),
+        ('qc_triage', 'QC triage'),
+        ('validate', 'Validate'),
+        ('replace', 'Find & replace'),
+        ('reset', 'Reset CV data'),
       ] %}
       {% for key, label in PRIMARY %}
       <a href="{{ url_for('section_list', section=key) }}"
@@ -37,7 +48,7 @@
       {% endfor %}
 
       {% set more_keys = MORE | map(attribute=0) | list %}
-      {% set tools_keys = TOOLS | map(attribute=0) | list %}
+      {% set tools_keys = (TOOLS | map(attribute=0) | list) + (extra_nav | map(attribute='key') | list) %}
       <details class="nav-menu {% if current_section in more_keys %}is-current{% endif %}">
         <summary aria-label="More sections">More <span class="caret" aria-hidden="true">&#9662;</span></summary>
         <div class="nav-menu-panel">
@@ -62,6 +73,15 @@
           <a href="{{ url_for('export_markdown') }}">Export Markdown</a>
           <a href="{{ url_for('export_html') }}">Export HTML</a>
           <a href="{{ url_for('reset_cv') }}" class="{% if current_section == 'reset' %}is-current{% endif %}"{% if current_section == 'reset' %} aria-current="page"{% endif %}>Reset CV data&hellip;</a>
+          {#- 1.2.0 nav seam: host-contributed entries. `extra_nav` carries only
+              resolved URL STRINGS (cv_editor/nav.py), so no url_for call — and
+              therefore no BuildError — can happen in this template. The `{%-`
+              markers are load-bearing: without them an empty loop still emits its
+              surrounding newline and indentation, which breaks the byte-identity
+              guarantee for a host that registers nothing. #}
+          {%- for e in extra_nav %}
+          <a href="{{ e.url }}" class="{% if current_section == e.key %}is-current{% endif %}"{% if current_section == e.key %} aria-current="page"{% endif %}>{{ e.label }}</a>
+          {%- endfor %}
         </div>
       </details>
     </nav>

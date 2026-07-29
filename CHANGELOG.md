@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.0
+
+Additive release adding a host-extension seam for nav entries. No breaking
+changes; with nothing registered the rendered nav is byte-identical to 1.1.0.
+
+### Added
+
+- **Host-contributed nav entries** in the new `cv_editor.nav` module. A host app
+  that wraps `create_app()` to add its own pages can now make them reachable from
+  the editor's nav. The committed surface is exactly `NavEntry` (a frozen,
+  keyword-only dataclass of `key` / `label` / `endpoint`), `register_nav(app,
+  entries)`, and `reserved_keys()`; everything else in the module is `_`-prefixed
+  and internal. Entries carry a Flask **endpoint name, not a URL**, so a host
+  cannot inject a raw `href` — Werkzeug refuses any rule that does not begin with
+  `/`, which makes a `javascript:`/`data:` target unrepresentable. Shape is
+  validated eagerly (during the host's startup); endpoints resolve per request and
+  a failure is dropped and logged once, never raised, because 25 templates extend
+  `base.html`. `register_nav` appends, so a host split across route modules can
+  have each contribute an entry. Contract in `docs/extending.md`.
+- **`reserved_keys()`** documents the keys the engine owns — every CV section name
+  plus every nav key the engine can set. It MAY GROW in a future minor release; a
+  host is advised to assert its own keys against it in its own test suite.
+
+### Fixed
+
+- **Tools menu active state.** Five of the Tools panel's links (`PubMed sync`,
+  `QC triage`, `Validate`, `Find & replace`, `Reset CV data`) never marked the
+  "Tools" summary as active on their own pages. Their routes set
+  `current_section` correctly; the Jinja-local `TOOLS` list that computes
+  `tools_keys` was missing those five keys.
+
 ## 1.1.0
 
 Additive release supporting an external static-site export of the CV. No

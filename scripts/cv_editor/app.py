@@ -60,6 +60,7 @@ from ruamel.yaml.comments import CommentedMap
 from cv_editor import (
     altmetric_tracker_cache,
     capabilities,
+    nav,
     notes_helpers,
     paths,
     schemas,
@@ -1534,16 +1535,57 @@ def create_app(data_dir=None, project_root=None) -> Flask:
                 section = key
                 break
         if section is None:
-            for nav_key in ("style", "freeze", "search", "urls", "citations", "pubmed_sync"):
+            for nav_key in nav._PATH_DERIVED_NAV_KEYS:
                 if path == f"/{nav_key}" or path.startswith(f"/{nav_key}/"):
                     section = nav_key
                     break
         if section is None and path.startswith("/publications/trackers"):
             section = "trackers"
+
+        # 1.2.0 nav seam: host-contributed entries, resolved to URLs. `_resolve` is
+        # documented not to raise, and this belt-and-braces catch is where the
+        # damage WOULD land — a raise here 500s all 25 templates that extend
+        # base.html, `/` included, which is the only recovery surface.
+        #
+        # The MATCHING below sits inside the same try as defence in depth, NOT as
+        # the fix for anything demonstrated. N1's checkpoint found a real escape
+        # here — `url_for` can return a non-str via a host's
+        # `url_build_error_handler`, and the matcher's attribute access then raised
+        # AttributeError out of this processor (reproduced) — but what closes that
+        # is `nav._resolve`'s `isinstance(url, str)` guard. Given the guard,
+        # `match_path` is always a str on a frozen dataclass, so this block cannot
+        # raise: mutating it back out of the try leaves the suite green (measured).
+        # Kept anyway, because a future field or matcher change would not be so safe.
+        try:
+            extra_nav = nav._resolve(app)
+            if section is None:
+                # Host entries, matched on their OWN resolved path — the engine
+                # never matches a literal host path. `extra_nav` is longest-first,
+                # so a host registering both /reports and /reports/monthly resolves
+                # the sub-page to the sub-page. `match_path` is decoded and
+                # slash-normalised; `script_root` is added back because `url_for`
+                # includes it while `request.path` does not. A host route passing
+                # `current_section` explicitly never reaches this fallback.
+                mounted = ((request.script_root if request else "") + path).rstrip("/") or "/"
+                for r in extra_nav:
+                    if mounted == r.match_path or mounted.startswith(r.match_path + "/"):
+                        section = r.key
+                        break
+        except Exception:  # a host bug must not take down every page
+            _nav_failure_logged = app.extensions.setdefault("cv_editor_nav_failed", [])
+            if not _nav_failure_logged:
+                # Log the traceback ONCE. A persistent failure would otherwise
+                # append a full traceback to the real log file on every request.
+                _nav_failure_logged.append(True)
+                app.logger.exception("nav: resolving host-contributed entries failed")
+            else:
+                app.logger.warning("nav: resolving host-contributed entries failed again")
+            extra_nav = []
         # T3.6: centralize TRACKER_HOSTS — JS reads from this single source.
         return {
             "messages": get_flashed_messages(with_categories=True),
             "current_section": section,
+            "extra_nav": extra_nav,
             "tracker_hosts": sorted(url_helpers.TRACKER_HOSTS),
             # P5: templates branch on capabilities to hide nav links + in-page
             # UI for features whose routes aren't registered (so url_for can't
