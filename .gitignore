@@ -5,6 +5,11 @@ __pycache__/
 .DS_Store
 *conflicted copy*
 .venv/
+# The documented setup is `make install` (pip, editable). A uv lockfile no
+# documented command reads would rot, and `uv sync` would then install from it.
+# Adopting uv here is a deliberate change to the Makefile + CONTRIBUTING, not a
+# by-product of someone running `uv sync` once.
+uv.lock
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
