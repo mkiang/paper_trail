@@ -18,6 +18,14 @@ canonical schema documentation (drift-guarded against the real headers by
 tests/test_m5_sample_data.py). Blank bodies are literally `[]`, never empty:
 `split_header` on a comment-only file returns header="" on the NEXT save,
 which would silently drop the schema docs.
+
+The example corpus is also the LIST of what a corpus contains, not just the
+headers. A host can carry data files this engine has no schema for — a
+curation file read only by its own export script — and those files are part
+of its corpus, so a reset has to handle them or it leaves the old corpus's
+data sitting beside a fresh one while reporting a clean slate. Both tree
+writers therefore iterate `example_dir/*.yml`; every schema section must
+still appear there, or `_corpus_yml_names` raises.
 """
 
 from __future__ import annotations
@@ -127,9 +135,46 @@ def _section_names() -> list[str]:
     return list(schemas.all_sections())
 
 
+def _corpus_yml_names(example_dir: Path) -> list[str]:
+    """Every `.yml` stem the example corpus declares, sorted.
+
+    Wider than `_section_names()` on purpose: a host's non-schema corpus file
+    (see the module docstring) is named nowhere else the engine can read. The
+    schema sections are still required — an example file that went missing
+    would otherwise drop its section from the reset silently, leaving the old
+    corpus's entries in place under a header the page claims it rewrote.
+    """
+    example_dir = Path(example_dir)
+    names = sorted(p.stem for p in example_dir.glob("*.yml"))
+    missing = [n for n in _section_names() if n not in names]
+    if missing:
+        raise FileNotFoundError(
+            f"example corpus {example_dir} has no example file for {missing} — "
+            "every schema section needs one (headers are single-sourced from it)"
+        )
+    return names
+
+
 def _example_header(name: str, example_dir: Path) -> str:
     header, _ = yaml_io.split_header((example_dir / f"{name}.yml").read_text(encoding="utf-8"))
     return header
+
+
+def _blank_body(name: str, example_dir: Path):
+    """The blank body for one corpus file: meta -> placeholders, otherwise an
+    EMPTY container of the example file's own root type.
+
+    All ten schema sections are sequences, so this is `[]` for every one of
+    them and the blank tree is unchanged. A host's file can be a mapping, and
+    `[]` there is not merely odd-looking — a loader that requires a mapping
+    root raises on it, so the "clean slate" would break the very tooling it
+    exists to reset. A header-only example file (root `None`) takes the
+    documented `[]` default.
+    """
+    if name == "meta":
+        return _blank_meta_body()
+    _, data = yaml_io.load(Path(example_dir) / f"{name}.yml")
+    return {} if isinstance(data, dict) else []
 
 
 # ---------- emptiness (single source of truth for banner + route waiver) ----------
@@ -286,16 +331,17 @@ def _write_section(path: Path, header: str, data) -> str:
 
 
 def blank_tree(data_dir: Path | None = None, *, example_dir: Path | None = None) -> dict[str, str]:
-    """Write the blank scaffold: 9 sections = example header + [] body;
-    meta = example header + placeholder body; empty citation snapshot.
+    """Write the blank scaffold: every example-declared `.yml` = its example
+    header + an empty body of its own root type; meta = example header +
+    placeholder body; empty citation snapshot.
     Returns {filename: created|overwrote}."""
     data_dir = DATA_DIR if data_dir is None else Path(data_dir)
     example_dir = EXAMPLE_DATA if example_dir is None else Path(example_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, str] = {}
-    for name in _section_names():
+    for name in _corpus_yml_names(example_dir):
         header = _example_header(name, example_dir)
-        body = _blank_meta_body() if name == "meta" else []
+        body = _blank_body(name, example_dir)
         written[f"{name}.yml"] = _write_section(data_dir / f"{name}.yml", header, body)
     atomic_write_json(data_dir / CITATION_SNAPSHOT, EMPTY_CITATION_SNAPSHOT)
     written[CITATION_SNAPSHOT] = "written"
@@ -313,7 +359,7 @@ def example_tree(
     example_dir = EXAMPLE_DATA if example_dir is None else Path(example_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, str] = {}
-    for name in _section_names():
+    for name in _corpus_yml_names(example_dir):
         src = Path(example_dir) / f"{name}.yml"
         header, data = yaml_io.load(src)
         written[f"{name}.yml"] = _write_section(data_dir / f"{name}.yml", header, data)
@@ -344,8 +390,13 @@ def reset(
       2. sections     — write blank/example tree (per-file .bak via
                         write_with_backup keeps each section individually
                         restorable through the existing /backups UI)
-      3. sidecars     — pubmed sidecar deleted (snapshotted in phase 1;
-                        loaders are silent-tolerant of absence);
+      3. sidecars     — every `data/*.json` phase 2 did not write is deleted
+                        (all were snapshotted in phase 1 by the same glob).
+                        That is the pubmed sidecar and any host sidecar
+                        derived from the old corpus: leaving one behind lets a
+                        single click repopulate the fresh corpus with the old
+                        one's data, which is why the pubmed sidecar was
+                        deleted by name here before this generalised;
                         .cache citation snapshot deleted (else one click of
                         POST /citations/snapshot resurrects the old corpus's
                         DOI counts into the fresh corpus);
@@ -353,6 +404,11 @@ def reset(
       4. qc artifacts — CORPUS_QC_FILES moved into the snapshot dir (their
                         finding IDs/decisions describe the old corpus; all
                         consumers 404/zero gracefully on absence)
+      5. unmanaged    — a REPORT, not an action: any `data/*.yml` left that
+                        phase 2 did not write, i.e. a corpus file with no
+                        example counterpart. Empty in both known corpora;
+                        it exists so the next such file surfaces on the page
+                        instead of surviving a reset unmentioned.
 
     NOT cross-file atomic, deliberately: the source content is known-good,
     so a mid-loop failure is fixed by re-running reset; callers surface the
@@ -386,11 +442,16 @@ def reset(
         raise
     _write_manifest(snap, manifest)
 
+    written = manifest["phases"]["sections"]
     sidecars: dict[str, str] = {}
-    pubmed = data_dir / PUBMED_SIDECAR
-    if pubmed.exists():
-        pubmed.unlink()
-        sidecars[PUBMED_SIDECAR] = "deleted (snapshotted)"
+    # Phase 1 snapshots data/*.json with this same glob, so "was snapshotted"
+    # holds by construction for everything deleted here — asserted by
+    # test_reset_deletes_every_json_sidecar_it_did_not_write.
+    for stale in sorted(data_dir.glob("*.json")):
+        if stale.name in written:
+            continue  # phase 2 owns it (citation_counts.json)
+        stale.unlink()
+        sidecars[stale.name] = "deleted (snapshotted)"
     cache_snapshot = cache_dir / CITATION_SNAPSHOT
     if cache_snapshot.exists():
         cache_snapshot.unlink()
@@ -407,6 +468,16 @@ def reset(
                 shutil.move(str(src), str(snap / "qc" / name))
                 moved.append(f"qc/{name}")
     manifest["phases"]["qc_moved"] = moved
+
+    # Phase 5 — report only. After phase 2 wrote every example-declared .yml
+    # and phase 3 removed every unwritten .json, anything still here is a
+    # corpus file with no example counterpart. The engine cannot guess its
+    # blank shape, so it says so rather than leaving it unmentioned.
+    manifest["phases"]["unmanaged"] = sorted(
+        p.name
+        for p in list(data_dir.glob("*.yml")) + list(data_dir.glob("*.json"))
+        if p.name not in written
+    )
     manifest["completed"] = True
     _write_manifest(snap, manifest)
     return manifest

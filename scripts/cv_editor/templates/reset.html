@@ -97,6 +97,15 @@
   {% endfor %}
 </ul>
 
+{%- if other_written %}
+<h2>Other corpus files rewritten</h2>
+<p class="muted">Declared by the example corpus but carrying no editor schema,
+  so they have no Backups page — restore them from the snapshot above.</p>
+<ul>
+  {% for name in other_written %}<li><code>{{ name }}</code></li>{% endfor %}
+</ul>
+{%- endif %}
+
 {% if manifest.phases.sidecars %}
 <h2>Sidecars</h2>
 <ul>
@@ -112,6 +121,18 @@
   {% for name in manifest.phases.qc_moved %}<li><code>{{ name }}</code></li>{% endfor %}
 </ul>
 {% endif %}
+
+{%- if manifest.phases.unmanaged %}
+<div class="banner banner-warn">
+  <strong>Left untouched:</strong> the files below are still in <code>data/</code>
+  with their previous contents. They have no counterpart in the example corpus,
+  so this reset had no blank shape to write and did not guess one. They are in
+  the snapshot; delete or edit them by hand, or add an example file for each.
+  <ul>
+    {% for name in manifest.phases.unmanaged %}<li><code>{{ name }}</code></li>{% endfor %}
+  </ul>
+</div>
+{%- endif %}
 
 <h2>Undo</h2>
 <p>Per section: the Backups links above restore individual files. Whole

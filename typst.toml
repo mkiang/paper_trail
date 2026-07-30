@@ -1,4 +1,4 @@
 [package]
 name = "paper-trail"
-version = "1.2.2"
+version = "1.2.3"
 entrypoint = "src/lib.typ"
