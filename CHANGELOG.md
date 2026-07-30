@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.3
+
+A reset now handles every file the corpus contains, and names the ones it
+cannot. No API change; hosts that carry extra `data/*.yml` files should read
+"Corpus files the engine has no schema for" in `docs/extending.md`.
+
+### Fixed
+
+- **`POST /reset` no longer leaves a host's corpus files behind while reporting
+  a clean slate.** Both tree writers looped over `schemas.all_sections()`, so a
+  data file the engine has no schema for was snapshotted and then left on disk
+  carrying the *old* corpus's contents. Measured against a real corpus: three
+  files survived a reset byte-for-byte, in both modes. The writers now iterate
+  the example corpus's own `*.yml` listing — the example tree already
+  single-sources every header, so it is the one place the engine can learn what
+  a corpus contains. Every schema section must still have an example file, or
+  `_corpus_yml_names` raises rather than silently skipping it.
+- **A blank body now matches the example file's own root type.** All ten schema
+  sections are sequences, so they are unchanged at `[]`. A mapping-rooted host
+  file gets `{}`; `[]` there is not just odd-looking, since a loader that
+  requires a mapping root raises on it — the "clean slate" would break the
+  tooling it exists to reset.
+- **The sidecar phase now deletes every `data/*.json` the sections phase did not
+  write**, not just `publications_pubmed_sync.json` by name. Phase 1 snapshots
+  with the same glob, so "was snapshotted first" holds by construction. The
+  argument that had the pubmed sidecar deleted applies verbatim to any
+  corpus-derived cache: leave one behind and a single click repopulates the
+  fresh corpus with the old one's data.
+
+### Added
+
+- **A `phases.unmanaged` report** naming any `data/*.yml` no phase accounted
+  for — a corpus file with no example counterpart, whose blank shape the engine
+  cannot guess. Empty for both known corpora. It exists so the next such file
+  surfaces on the reset page instead of surviving unmentioned, and the page
+  renders it as a warning, not a footnote.
+- **The reset page lists non-schema corpus files it rewrote.** They have no
+  Backups URL, so the previous list — built from schema sections only — omitted
+  them silently.
+
 ## 1.2.2
 
 Bug fixes in the nav seam's path-overlap warning. No API change.

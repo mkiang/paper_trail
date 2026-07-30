@@ -711,12 +711,19 @@ def register_core_routes(app: Flask, deps: CoreDeps) -> None:
             for f in sorted(written)
             if f.endswith(".yml") and f[:-4] in section_keys
         ]
+        # A host corpus file has no schema entry and so no Backups URL, but it
+        # WAS rewritten — listing only the schema sections would under-report
+        # the reset on the page that exists to say what it did.
+        other_written = [
+            f for f in sorted(written) if f.endswith(".yml") and f[:-4] not in section_keys
+        ]
         return render_template(
             "reset.html",
             stage="manifest",
             mode=mode,
             manifest=manifest,
             backup_links=backup_links,
+            other_written=other_written,
             current_section="reset",
         )
 

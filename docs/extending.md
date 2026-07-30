@@ -138,6 +138,39 @@ fix, so every drop writes one line. The log is `app.config["LOG_PATH"]`.
 each contribute its own entry. Registering a key that is already registered on
 that app raises rather than overwriting.
 
+## Corpus files the engine has no schema for
+
+A host may keep data files in `data/` that only its own code reads — a curation
+file consumed by its export script, a cache keyed to its corpus. The engine has
+no schema for them, and that is fine everywhere except **`POST /reset`**, which
+has to leave the data directory holding exactly one corpus.
+
+Since 1.2.3 the reset derives its file list from the **example corpus**, not from
+the schema registry. `paths.example_dir()` prefers `<project_root>/data/example`
+and falls back to the bundled `cv_editor/example_data`, so the rule is:
+
+> Ship `data/example/<name>.yml` for every `data/<name>.yml` you carry, and the
+> reset handles it like any section — example header, example body in example
+> mode, an empty container of the example's own root type in blank mode.
+
+Three consequences worth knowing before you rely on it:
+
+- **A mapping-rooted file blanks to `{}`, a sequence-rooted one to `[]`**, taken
+  from the example file's own root. Give the example file the same root type as
+  the real one or the blank corpus will not load.
+- **Every schema section must still have an example file.** One missing raises at
+  reset time rather than quietly skipping that section — which would leave the
+  old entries in place under a header the page claims it rewrote.
+- **`data/*.json` you do not declare is DELETED** (after being snapshotted), on
+  the assumption it is a cache derived from the corpus being replaced. Only the
+  citation snapshot the sections phase writes survives. If you have a `.json`
+  that must persist across a reset, keep it outside `data/`.
+
+A `.yml` with no example counterpart is neither rewritten nor deleted: it is
+reported in `manifest["phases"]["unmanaged"]` and shown on the reset page as a
+warning that those files still hold their previous contents. That list is empty
+for a fully-declared corpus, so treat a non-empty one as a missing example file.
+
 Call order does not matter: fields and batches are validated when you call, and
 endpoints are not resolved until a request, so registering before or after your
 routes attach both work.
