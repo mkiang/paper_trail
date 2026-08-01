@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.4
+
+Builds are killed properly and can actually time out. No API change, except that
+`stream_subprocess` gains an optional `timeout_s`; hosts need no edits.
+
+### Fixed
+
+- **Killing a build now kills the whole process group, not just the shell.**
+  `stream_subprocess` and `_run` spawned without `start_new_session`, so `proc.kill()`
+  SIGKILLed `./build.sh` alone — and an untrappable signal cannot be forwarded to an
+  already-forked `typst` (or, in a host that streams an export, to whatever that recipe
+  spawned). Those children were orphaned and kept running, and kept WRITING, after the
+  stream had reported "killed" and the `finally` had released the build lock; a user who
+  retried then raced two writers over the same outputs with no lock held. The ordinary
+  trigger is `GeneratorExit` — closing the tab or navigating away mid-build — not the
+  timeout. Verified with a forking child and a positive control proving the grandchild
+  really does survive when the group is left alone.
+- **The build timeout could not fire on a silent child.** The deadline was evaluated
+  only just after `readline` returned, and `readline` blocks forever on a child that
+  says nothing, so a hung build was never capped at all. A reader thread feeding a queue
+  lets the deadline run on a timer. It is checked BEFORE each read, so a continuously
+  chatty child cannot starve it either — the symmetric failure, and the one that bites a
+  full multi-variant build.
+- **`_run` could hang outright on a timeout.** `subprocess.run(timeout=...)` kills only
+  the direct child and then blocks in `communicate()` until every inherited pipe closes,
+  so one orphaned grandchild holding stdout wedged the request thread. It now spawns
+  through `Popen`, kills the group, and drains.
+- **A killed stream is no longer reported as a success.** `ok` was `rc == 0` alone, and
+  a killed child can still exit 0 in the race between the kill and the wait.
+
+### Added
+
+- `stream_subprocess(argv, cmd_str=None, timeout_s=None)` — `timeout_s` overrides
+  `BUILD_TIMEOUT_S` for jobs that legitimately outlast a PDF build, such as a host that
+  streams a full export-and-sync.
+- `build_runner._kill_process_group(proc)`, which **refuses to signal its own process
+  group**. A child spawned without `start_new_session` shares the caller's group, so an
+  unguarded `killpg` would SIGTERM the editor itself; it degrades to a single-process
+  kill instead. Not hypothetical — mutating the flag away to check the new tests were
+  honest killed the entire pytest session, which is how the guard was found.
+
 ## 1.2.3
 
 A reset now handles every file the corpus contains, and names the ones it
