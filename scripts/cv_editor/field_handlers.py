@@ -105,8 +105,32 @@ def _apply_audiences_set(form: dict, f: dict, entry: CommentedMap) -> None:
         seq = CommentedSeq(items)
         seq.fa.set_flow_style()
         entry[name] = seq
-    else:
-        entry.pop(name, None)
+        return
+    if not f.get("choices"):
+        # NO VOCABULARY CONFIGURED -> "nothing checked" is not a choice the user
+        # could have made, so it must not be read as "clear this field".
+        #
+        # `choices` on this field type is data-driven (see `schemas.py`'s widen
+        # helpers), so it CAN come back empty: a malformed `data/meta.yml`, a
+        # renamed key, an unreadable data dir. The form then renders zero
+        # checkboxes, the JS writes `[]` into the hidden input at mount, and
+        # `validate_entry` skips empty optional values — so without this branch
+        # the next ordinary save of ANY entry silently deletes the field, with
+        # `js_mounted=1` set and every test green. That is the gotcha #72
+        # data-loss shape, and for a corpus-wide vocabulary it would run through
+        # every entry the user touches afterwards.
+        #
+        # Leaving the value alone instead makes the failure LOUD rather than
+        # destructive: the field keeps its data, and `_validate_audiences_set`
+        # below reports every existing value as unknown (empty `choices` means
+        # nothing validates), which surfaces on /validate, `check_data --strict`
+        # and the build.sh preflight.
+        #
+        # INERT for `audiences`/`hide-from`: their vocabulary is
+        # `BASE_AUDIENCES` unioned with the corpus, and the base set is a
+        # non-empty literal, so those fields can never reach this branch.
+        return
+    entry.pop(name, None)
 
 
 def _apply_grant_amount(form: dict, f: dict, entry: CommentedMap) -> None:

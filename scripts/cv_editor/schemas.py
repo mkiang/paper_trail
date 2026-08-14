@@ -13,7 +13,11 @@ Field types understood by the form renderer:
     bool          - checkbox
     select        - dropdown of choices
     string_list   - editable list of strings (one per row)
-    audiences_set - checkbox set over the fixed audience tags
+    audiences_set - checkbox set over a data-driven vocabulary (`choices`).
+                    Used for `audiences`/`hide-from` and for publications
+                    `tags`. When `choices` is EMPTY the handler leaves the
+                    stored value alone instead of clearing it — see
+                    field_handlers._apply_audiences_set.
     grant_amount  - text input; display strips a leading "\\$", store
                     re-adds it (single-quoted YAML)
     author_list   - dynamic author list editor (publications)
@@ -47,6 +51,15 @@ from cv_editor import build_variants as _bv
 # edit form offers them. No personal/institution audience is hardcoded here.
 # EDITOR-ONLY — the renderer's visible() (lib/flags.typ) is fully data-driven.
 AUDIENCES = list(_bv.BASE_AUDIENCES)
+
+# Topic-tag vocabulary for the publications `tags:` field. HOST-DECLARED: unlike
+# AUDIENCES there is no generic base set, because a topic taxonomy is inherently
+# personal — it comes from `data/meta.yml`'s `tags:` block, widened at import with
+# every tag the corpus already uses (see _widen_tags_from_data at the end of this
+# module). A host that declares none simply gets an empty checkbox group; the
+# empty-`choices` guard in field_handlers keeps that state non-destructive rather
+# than letting it delete the field. EDITOR-ONLY — the renderer never reads tags.
+TAGS: list[str] = []
 
 # ---- shared field bits ----
 
@@ -87,6 +100,16 @@ _HOSTED_PDF_FIELD = {
     "type": "text",
     "label": "Hosted paper PDF path (website)",
     "placeholder": "site-root-relative, e.g. papers/my_paper.pdf",
+}
+# Topic tags. Reuses `audiences_set` deliberately rather than adding a type: every
+# site of that type is generic over `name`/`choices`, and everything SEMANTIC about
+# audiences keys on the field NAME, so a differently-named field of the same type
+# is inert for visibility. Reuse also keeps `JSON_FIELD_TYPES` unchanged.
+_TAGS_FIELD = {
+    "name": "tags",
+    "type": "audiences_set",
+    "label": "Topic tags (website; empty = untagged)",
+    "choices": TAGS,
 }
 
 
@@ -174,6 +197,7 @@ PUBLICATIONS = {
         {"name": "notes", "type": "typed_notes", "label": "Notes"},
         _WEB_FIELD,
         _HOSTED_PDF_FIELD,
+        _TAGS_FIELD,
         _HIGHLIGHTED_FIELD,
     ],
 }
@@ -660,4 +684,41 @@ def _widen_audiences_from_data() -> None:
         pass
 
 
+def _widen_tags_from_data() -> None:
+    """Fill TAGS in place from `meta.tags` ∪ every tag the corpus already uses.
+
+    Mirrors the audiences twin, with one deliberate difference: it LOGS on
+    failure instead of passing silently. That twin's silence is defensible only
+    because its fallback is a valid non-empty base set; TAGS has no base, so a
+    failure here leaves the vocabulary EMPTY, and an empty vocabulary means the
+    edit form renders no checkboxes for a field the corpus may already populate.
+    The field_handlers empty-`choices` guard keeps that state from deleting
+    anything, and this log is how the operator finds out why the checkboxes
+    vanished. An import-time raise is not an option — it would brick the editor
+    over a typo in one YAML key.
+    """
+    try:
+        from pathlib import Path
+
+        from cv_editor import paths, yaml_io
+
+        base = paths.data_dir()
+        _, meta = yaml_io.load(base / "meta.yml")
+
+        def _load(key):
+            return yaml_io.load(base / Path(get(key)["file"]).name)[1]
+
+        TAGS[:] = list(_bv.tag_choices(meta or {}, _load))
+    except Exception as exc:  # noqa: BLE001 — see the docstring; must not raise
+        import sys
+
+        print(
+            f"cv_editor.schemas: could not resolve the topic-tag vocabulary "
+            f"({type(exc).__name__}: {exc}). The Tags checkboxes will be empty; "
+            f"existing tags are left untouched.",
+            file=sys.stderr,
+        )
+
+
 _widen_audiences_from_data()
+_widen_tags_from_data()

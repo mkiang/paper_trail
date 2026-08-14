@@ -87,6 +87,70 @@ def audience_choices(meta: dict | None = None, load_data=None) -> tuple[str, ...
     return BASE_AUDIENCES + tuple(sorted(extras))
 
 
+#: The corpus field `tag_choices` widens from, and the section it lives on.
+TAG_FIELD = "tags"
+TAG_SECTION = "publications"
+
+
+def tag_choices(meta: dict | None = None, load_data=None) -> tuple[str, ...]:
+    """Topic-tag vocabulary = `meta.tags` ∪ every tag present in the corpus.
+
+    Same self-healing shape as `audience_choices` and for the same reason: a tag
+    an entry already carries must always validate and must always be offered as a
+    checkbox, because a value the form cannot offer is a value the next save
+    DELETES (the form posts only what is checked).
+
+    THE DIFFERENCE THAT MATTERS: there is no base set. `audience_choices` returns
+    `BASE_AUDIENCES + extras`, so it is non-empty whatever the data looks like.
+    Here an absent or malformed `meta.tags` with an untagged corpus returns `()`,
+    and an empty vocabulary is exactly the state `_apply_audiences_set`'s
+    empty-`choices` guard exists to make non-destructive. Callers that need the
+    DECLARED vocabulary as an authority (rather than the form's offer set) must
+    read `meta.tags` directly — the union is contaminated by the corpus by
+    design, so one typo that ever reaches a data file would otherwise bless
+    itself permanently.
+
+    Declared order first (it is canonical for both the checkbox order and any
+    writer that sorts into it), then any corpus extras sorted. EDITOR-ONLY: the
+    renderer never reads tags.
+    """
+    declared: list[str] = []
+    for t in (meta or {}).get(TAG_FIELD) or []:
+        t = str(t).strip()
+        if t and t not in declared:
+            declared.append(t)
+    extras: set[str] = set()
+    if load_data is not None:
+        from cv_editor import schemas as _schemas
+
+        try:
+            data = load_data(TAG_SECTION)
+            structure = _schemas.get(TAG_SECTION)["structure"]
+        except Exception:
+            data, structure = None, None
+        if structure is not None:
+            for entry in _walk_entries(data, structure):
+                if not isinstance(entry, dict):
+                    continue
+                raw = entry.get(TAG_FIELD)
+                # A NON-LIST IS SKIPPED, NOT COERCED. `tags: substance use` (a
+                # bare string, the likeliest hand-edit slip and the shape behind
+                # gotcha #58's twice-paid corruption) iterates CHARACTER BY
+                # CHARACTER, so widening from it would add every letter to the
+                # vocabulary — and once in the union each letter validates, is
+                # offered as a checkbox, and exports as a real tag id. Skipping
+                # leaves the malformed value to be reported by data_check rather
+                # than silently legitimised.
+                if not isinstance(raw, (list, tuple)):
+                    continue
+                for t in raw:
+                    t = str(t).strip()
+                    if t:
+                        extras.add(t)
+    extras -= set(declared)
+    return tuple(declared) + tuple(sorted(extras))
+
+
 BOOLEAN_INPUTS = (
     "review",
     "show_pending",
