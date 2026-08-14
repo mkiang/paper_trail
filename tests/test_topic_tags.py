@@ -169,3 +169,37 @@ def test_the_engine_corpus_declares_a_vocabulary():
     exercises the field with an empty vocabulary and the release ships with no
     coverage of the populated path."""
     assert schemas.TAGS, "data/meta.yml should declare a `tags:` block"
+
+
+def test_the_guard_does_NOT_cover_a_fresh_rebuild_and_here_is_the_proof():
+    """CHARACTERIZATION TEST for a KNOWN GAP — it pins what currently happens, not
+    what should.
+
+    Every other test here builds `CommentedMap(existing)`, i.e. an entry that
+    already carries the value. That is the in-place edit path. A publications
+    SUBSECTION MOVE takes a different branch — `sections_routes.py` calls
+    `_form_to_entry(form_data, sch)` with NO `existing=`, so the entry starts EMPTY.
+    There is then no prior value for the empty-`choices` guard to preserve, and the
+    posted `tags_json` is `[]` because the form rendered zero checkboxes. The moved
+    entry comes out with no `tags` key, and `validate_entry` skips empty optional
+    values, so nothing downstream can tell it from "never tagged".
+
+    Trigger needs BOTH an empty vocabulary and a subsection move, so it is narrow.
+    The fix belongs at the call site (pass `existing=`), which also closes that
+    branch's long-standing unmanaged-key hole; it is an engine behaviour change and
+    is tracked as such.
+
+    WHEN THAT FIX LANDS, THIS TEST SHOULD FAIL. Invert it then — do not delete it.
+    """
+    field = {"name": "tags", "type": "audiences_set", "choices": []}
+    fresh = CommentedMap()  # the shape the rebuild path actually uses
+    FIELD_HANDLERS["audiences_set"].apply({"tags": []}, field, fresh)
+    assert "tags" not in fresh, (
+        "if this now HOLDS a value, the fresh-rebuild gap has been closed — "
+        "invert this assertion and update the comment in _apply_audiences_set"
+    )
+
+    # Contrast: the in-place path, which the guard DOES cover.
+    in_place = CommentedMap({"tags": ["Health inequities"]})
+    FIELD_HANDLERS["audiences_set"].apply({"tags": []}, field, in_place)
+    assert in_place["tags"] == ["Health inequities"]
