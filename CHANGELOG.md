@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.5
+
+A topic-tag field for publications, and a guard so a data-driven vocabulary can
+never delete the field it configures. Additive for hosts: no API change, and the
+new field is inert unless you declare a vocabulary.
+
+### Added
+
+- **`tags` on publications** — a checkbox set over a vocabulary the HOST declares
+  in `data/meta.yml` under `tags:`, for grouping papers by subject. Inert in the
+  Typst renderer; read by the editor's schema and available to a site exporter.
+  Reuses the existing `audiences_set` field type rather than adding one: every
+  site of that type is generic over `name`/`choices`, and everything semantic
+  about audiences keys on the field NAME, so a differently-named field of the
+  same type is inert for visibility. `JSON_FIELD_TYPES` is unchanged, and no
+  template, JS, CSS or form-state edit was needed.
+- **`build_variants.tag_choices(meta, load_data)`** — the vocabulary is
+  `meta.tags` unioned with every tag the corpus already carries, declared order
+  first then extras sorted. The union is what keeps a stored tag offered: the form
+  posts only what is checked, so a value it cannot offer is a value the next save
+  deletes. Note the union is therefore contaminated by the corpus BY DESIGN — a
+  caller that needs the vocabulary as an authority must read `meta.tags` directly.
+
+### Fixed
+
+- **An empty `choices` no longer clears an `audiences_set` field.** `choices` for
+  this type is data-driven, so it can legitimately resolve empty — a malformed
+  `meta.yml`, a renamed key, an unreadable data dir. That state used to DELETE the
+  field on the next ordinary save: the form rendered zero checkboxes, the JS wrote
+  `[]` into the hidden input at mount, `validate_entry` skipped the empty optional
+  value, and the apply handler popped the key. `js_mounted` was set, so the
+  JS-mount sentinel never fired, and every test stayed green. For a corpus-wide
+  vocabulary that repeats on every entry the user touches afterwards.
+
+  The handler now leaves the stored value alone when `choices` is empty, which
+  turns the failure from destructive into loud: the data survives and
+  `_validate_audiences_set` reports each value as unknown, surfacing on
+  `/validate`, `check_data --strict` and the build preflight. Provably inert for
+  `audiences`/`hide-from`, whose vocabulary is a non-empty base set unioned with
+  the corpus — asserted by a test rather than assumed.
+
 ## 1.2.4
 
 Builds are killed properly and can actually time out. No API change, except that

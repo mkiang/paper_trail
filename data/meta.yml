@@ -182,3 +182,30 @@ build_variants:
   inputs:
     template: modern
     audience: public-health
+# ----------------------------------------------------------------------------
+# tags: the topic-tag vocabulary for publications (OPTIONAL)
+# ----------------------------------------------------------------------------
+# A flat list of the topic labels the editor offers as checkboxes on each
+# publication, stored per entry as `tags: [Label, Other label]`. INERT in the
+# Typst renderer -- it is read by the editor's schema and by an external site
+# exporter, and nothing in any .typ file looks at it.
+#
+#   * ORDER IS CANONICAL. The checkbox group renders in this order, so anything
+#     that writes tags should sort into it too; reordering this list reorders
+#     every tagged entry the next time it is saved.
+#   * The vocabulary the FORM offers is this list UNIONED with every tag the
+#     corpus already carries, so a tag already in the data can never stop being
+#     offered (a value the form cannot offer is one the next save deletes).
+#     A consequence: a typo that reaches a data file blesses itself. Anything
+#     that needs the vocabulary as an AUTHORITY must read this list directly.
+#   * Read once at import, so add a tag here and restart the editor.
+#   * Avoid a comma or bracket in a label (these are stored as a YAML flow
+#     sequence), keep them ASCII, and keep their slugs distinct if you export
+#     them.
+#   * Omit the block entirely and the Tags checkboxes are simply empty; existing
+#     tags are left untouched rather than cleared.
+tags:
+- Health inequities
+- Infectious disease
+- Environmental health
+- Methods

@@ -9,7 +9,12 @@ Field types:
   select                  - value must be in the schema's `choices` list
   string_list             - list of strings; required = at least one
                             non-empty entry
-  audiences_set           - set of strings, each in `choices`
+  audiences_set           - set of strings, each in `choices`. `choices` is
+                            data-driven, so it can be empty; an empty one makes
+                            every stored value report as unknown here, which is
+                            the intended LOUD signal that a vocabulary failed to
+                            load (the apply handler refuses to clear the field in
+                            that state rather than deleting it)
   grant_amount            - free text; stored single-quoted with leading
                             backslash-dollar
   author_list             - non-empty if required; each row has a name
