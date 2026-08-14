@@ -133,14 +133,25 @@ def tag_choices(meta: dict | None = None, load_data=None) -> tuple[str, ...]:
                 if not isinstance(entry, dict):
                     continue
                 raw = entry.get(TAG_FIELD)
-                # A NON-LIST IS SKIPPED, NOT COERCED. `tags: substance use` (a
-                # bare string, the likeliest hand-edit slip and the shape behind
-                # gotcha #58's twice-paid corruption) iterates CHARACTER BY
-                # CHARACTER, so widening from it would add every letter to the
-                # vocabulary — and once in the union each letter validates, is
-                # offered as a checkbox, and exports as a real tag id. Skipping
-                # leaves the malformed value to be reported by data_check rather
-                # than silently legitimised.
+                # ISINSTANCE, NOT `or []`. This one line does two jobs and a
+                # mutation test proved both:
+                #
+                #   1. It skips an ABSENT key, which is the common path — most
+                #      entries carry no tags. `for t in None` raises TypeError,
+                #      and the caller (`schemas._widen_tags_from_data`) catches
+                #      broadly, so dropping this leaves the vocabulary EMPTY for
+                #      the whole process with only a log line to say why.
+                #   2. It skips a NON-LIST. `tags: substance use` (a bare string,
+                #      the likeliest hand-edit slip and the shape behind gotcha
+                #      #58's twice-paid corruption) iterates CHARACTER BY
+                #      CHARACTER, so widening from it would add every letter to
+                #      the vocabulary — and once in the union each letter
+                #      validates, is offered as a checkbox, and exports as a real
+                #      tag id.
+                #
+                # `or []` fixes only (1) and silently reintroduces (2). Leaving a
+                # malformed value out lets data_check report it instead of the
+                # vocabulary legitimising it.
                 if not isinstance(raw, (list, tuple)):
                     continue
                 for t in raw:
