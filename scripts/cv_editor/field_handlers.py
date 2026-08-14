@@ -126,6 +126,13 @@ def _apply_audiences_set(form: dict, f: dict, entry: CommentedMap) -> None:
         # nothing validates), which surfaces on /validate, `check_data --strict`
         # and the build.sh preflight.
         #
+        # DOES NOT COVER A FRESH REBUILD. This preserves a value the entry
+        # ALREADY has. `sections_routes.py`'s subsection-move branch builds a new
+        # CommentedMap with no `existing=`, so there is nothing here to preserve
+        # and the key is simply absent — silently, since `validate_entry` skips
+        # empty optional values. Narrow (it needs an empty vocabulary AND a
+        # subsection move) but real; the fix belongs at that call site.
+        #
         # INERT for `audiences`/`hide-from`: their vocabulary is
         # `BASE_AUDIENCES` unioned with the corpus, and the base set is a
         # non-empty literal, so those fields can never reach this branch.
