@@ -119,7 +119,7 @@ PUBLICATIONS = {
     "file": "data/publications.yml",
     "label": "Publications",
     "structure": "list_of_subsections",
-    "list_columns": ["year", "title", "first_author", "subsection"],
+    "list_columns": ["year", "title", "first_author", "subsection", "web"],
     "subsections": [
         "Peer-Reviewed Original Research",
         "Other Peer-reviewed Publications",
@@ -209,7 +209,7 @@ PRESENTATIONS = {
     "file": "data/presentations.yml",
     "label": "Presentations",
     "structure": "list_of_subsections",
-    "list_columns": ["date", "title", "venue", "subsection"],
+    "list_columns": ["date", "title", "venue", "subsection", "web"],
     # These ARE the section headings that render on the CV (the renderer reads
     # subsection names from the data, and these must match them exactly — see the
     # drift guard test_schema_subsections_cover_data). This is the single source
@@ -393,7 +393,7 @@ TEACHING = {
     "file": "data/teaching.yml",
     "label": "Teaching",
     "structure": "clusters",
-    "list_columns": ["date", "role", "course", "institution"],
+    "list_columns": ["date", "role", "course", "institution", "web"],
     "show_hidden_default": True,
     "fields": [
         {

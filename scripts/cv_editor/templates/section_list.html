@@ -34,6 +34,14 @@
   <div class="toolbar-filters">
     <span class="muted toolbar-label">Filter:</span>
     <label class="toolbar-toggle"><input type="checkbox" id="show-hidden"{% if show_hidden_default %} checked{% endif %}> Show hidden{% if show_hidden_default %} <span class="muted">(default for this section)</span>{% endif %}</label>
+    {# `web: hide` is a DIFFERENT gate from `highlighted` -- see _row_for_listing.
+       Defaults CHECKED so the page opens on the full list exactly as it did before
+       this filter existed; unchecking narrows to what a website export would show.
+       Gated on the column being present because a filter for a value you cannot see
+       is the same defect one step removed. #}
+    {% if 'web' in list_columns %}
+    <label class="toolbar-toggle"><input type="checkbox" id="show-web-hidden" checked> Show <code>web: hide</code> <span class="muted">(default on)</span></label>
+    {% endif %}
     {% if section_key == 'publications' %}
     <label class="toolbar-toggle"><input type="checkbox" id="needs-contrib-only"> Needs contribution note only</label>
     <label class="toolbar-toggle"><input type="checkbox" id="show-citation-counts"> Show Cited-by</label>
@@ -80,7 +88,7 @@
     <button type="submit" class="btn-primary">Apply to selected</button>
     <button type="button" class="btn-secondary" id="bulk-clear">Clear selection</button>
     <p class="hint bulk-hide-hint">
-      "Hidden" entries are dropped from <code>cv.pdf</code> (and most other build variants), but the <code>everything.pdf</code> build intentionally renders them. Toggle <em>Show hidden</em> above to see them in this table.
+      <strong>Two independent gates.</strong> "Hidden" (<code>highlighted: true</code>) drops an entry from <code>cv.pdf</code> and most other build variants, though <code>everything.pdf</code> renders them on purpose — toggle <em>Show hidden</em> to see those here. <code>web: hide</code> is unrelated and affects no PDF: it tells a website export not to display the entry. An entry can be in either state, both, or neither, and the <code>web</code> column shows the second one (<em>auto</em> = unset, so the exporter decides).
     </p>
   </div>
 {% endif %}
@@ -114,6 +122,7 @@
         data-subsection="{{ r.subsection }}"
         data-institution="{{ r.institution }}"
         data-needs-contrib="{{ '1' if r.needs_contribution else '0' }}"
+        data-web-hidden="{{ '1' if r.web_hidden else '0' }}"
         {% if r.highlighted %}hidden{% endif %}>
       {% if section_key == 'publications' %}
       <td class="select-col"><input type="checkbox" class="row-select" name="selected" value="{{ r.global_idx }}"></td>
@@ -146,6 +155,11 @@
         {% elif col == 'date' and section_key == 'presentations' and r.sort_values and r.sort_values.date and r.sort_values.date[4:6] != '00' %}
           {# Match the publications 'year · MM' display: talks always use a single MM/YYYY, so render year prominently with muted month. #}
           {{ r.sort_values.date[0:4] }}<span class="muted sort-sub" title="Sorted by year, then month"> · {{ r.sort_values.date[4:6] }}</span>
+        {% elif col == 'web' %}
+          {# Blank is a REAL third state ("automatic"), not missing data: the site
+             exporter decides what it resolves to, sometimes from a sibling field.
+             Render it as such so an unset row is not read as `show`. #}
+          {% if r[col] %}{{ r[col] }}{% else %}<span class="muted" title="Blank = automatic; the site exporter decides">auto</span>{% endif %}
         {% else %}
         {{ r[col] }}
         {% endif %}
@@ -181,6 +195,7 @@
 <script>
 (function () {
   const showHidden = document.getElementById('show-hidden');
+  const showWebHidden = document.getElementById('show-web-hidden');
   const needsContribOnly = document.getElementById('needs-contrib-only');
   const filterSub = document.getElementById('filter-subsection');
   const filterInst = document.getElementById('filter-institution');
@@ -190,16 +205,24 @@
     const sub = filterSub ? filterSub.value : '';
     const inst = filterInst ? filterInst.value : '';
     const showH = showHidden && showHidden.checked;
+    // Absent control means "no web filter on this section", so default to showing
+    // everything -- NOT to hiding rows a section never opted into filtering.
+    const showWebH = !showWebHidden || showWebHidden.checked;
     const needsOnly = needsContribOnly && needsContribOnly.checked;
     rows.forEach(r => {
       const isHidden = r.classList.contains('is-hidden');
+      const isWebHidden = r.dataset.webHidden === '1';
       const matchSub = !sub || r.dataset.subsection === sub;
       const matchInst = !inst || r.dataset.institution === inst;
       const matchNeeds = !needsOnly || r.dataset.needsContrib === '1';
-      r.hidden = (!showH && isHidden) || !matchSub || !matchInst || !matchNeeds;
+      r.hidden =
+        (!showH && isHidden) ||
+        (!showWebH && isWebHidden) ||
+        !matchSub || !matchInst || !matchNeeds;
     });
   }
   if (showHidden) showHidden.addEventListener('change', applyFilters);
+  if (showWebHidden) showWebHidden.addEventListener('change', applyFilters);
   if (needsContribOnly) needsContribOnly.addEventListener('change', applyFilters);
   // Rows where r.highlighted is true are rendered server-side with
   // the `hidden` attribute. When a section defaults show-hidden ON we

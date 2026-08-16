@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.6
+
+A `web` column and its own filter on the section list. Fixes a reported bug: the
+`Show hidden` filter appeared to do nothing on the publications page.
+
+### Fixed
+
+- **`Show hidden` was inert on any section that does not use `highlighted:`.** It
+  filters `highlighted: true` — the PDF gate — and in a corpus where no
+  publication carries that field, the control could never reveal a row while a
+  large and completely invisible `web: hide` split sat on the same page. A
+  control that can never do anything is broken even when the code behind it is
+  sound, so this is filed as a fix rather than a feature.
+
+### Added
+
+- **A `web` column on every section that carries the `web` field** (publications,
+  presentations, teaching). Blank renders as a muted `auto`, because blank is a
+  real third state — "the site exporter decides" — and an empty cell reads as
+  `show`.
+- **A `Show web: hide` filter**, defaulting to CHECKED so a list page opens on the
+  full set exactly as it did before this existed. Unchecking narrows to what a
+  website export would display. The column and the filter are declared together:
+  a filter for a value you cannot see is the same defect one step removed.
+- **`web_hidden` on every list row.** Only an explicit `hide` counts — blank means
+  automatic, and what automatic resolves to belongs to the site exporter, which
+  may default it off a sibling field. The engine deliberately does not guess;
+  under-reporting a blank is honest, whereas inventing a default would put a
+  number on the page that no exporter agrees with.
+- The bulk-action hint now states that `highlighted:` and `web:` are two
+  independent gates and that `web:` affects no PDF.
+
+### Notes for hosts
+
+No API change and no migration. A host that declares no `web` field on any section
+sees no new column, no new control, and identical pages. `AUTHORSHIPS_VERSION` and
+every export contract are untouched — this release does not touch export code.
+
 ## 1.2.5
 
 A topic-tag field for publications, and a guard so a data-driven vocabulary can

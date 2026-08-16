@@ -472,6 +472,19 @@ def create_app(data_dir=None, project_root=None) -> Flask:
         row = {
             "global_idx": rec["global_idx"],
             "highlighted": bool(entry.get("highlighted")),
+            # `web: hide` is a SEPARATE gate from `highlighted` and the list view
+            # needs both: `highlighted` hides an entry from the PDF, `web` hides it
+            # from a website export. Conflating them was the 2026-08-15 bug report --
+            # `Show hidden` filtered `highlighted`, which is unset on every
+            # publication in the reference corpus, so the control could never do
+            # anything while a real 58-of-104 `web: hide` split was invisible.
+            #
+            # ONLY AN EXPLICIT "hide" COUNTS. Blank means "automatic", and what
+            # automatic resolves to is the SITE EXPORTER's business (it may default
+            # from a sibling field, e.g. presence of `slides`), so the engine must
+            # not guess. Under-reporting a blank is honest; inventing a default here
+            # would put a number on the page that no exporter agrees with.
+            "web_hidden": str(entry.get("web") or "").strip().lower() == "hide",
             "view_url": url_for("entry_view", section=section_key, idx=rec["global_idx"]),
         }
         list_cols = sch.get("list_columns", []) or []
