@@ -185,9 +185,24 @@ def test_the_filter_script_consults_the_web_flag(client):
 
 def test_blank_web_renders_as_auto_not_as_empty(client):
     """Blank is a real third state. Rendering it as an empty cell reads as
-    `show`, which is exactly the wrong inference — the exporter decides."""
+    `show`, which is exactly the wrong inference — the exporter decides.
+
+    ASSERTS THE CELL, NOT THE WORD. The first version asserted `">auto<" in body`
+    and that is page furniture: the bulk-action hint on the same page contains
+    `<em>auto</em>`, so the test passed whether or not any cell rendered. Verified
+    against a real corpus where every `web` is unset AND one where none is —
+    only the hint matched in the second. Second time this suite hit that trap.
+    """
     body = client.get("/publications").data.decode("utf-8")
-    assert ">auto<" in body, "an unset `web` should render the muted 'auto' marker"
+    cells = re.findall(r'<td class="col-web".*?</td>', body, re.S)
+    assert cells, "no web column cells rendered"
+    blanks = [c for c in cells if "Blank = automatic" in c]
+    assert blanks, (
+        "an unset `web` must render the muted 'auto' marker in its own cell; "
+        f"first cell was {cells[0][:200]!r}"
+    )
+    for c in blanks:
+        assert ">auto<" in c
 
 
 def test_the_hint_names_both_gates_and_says_they_are_independent(client):
