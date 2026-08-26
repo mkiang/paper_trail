@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.2.7
+
+`verify_urls` now health-checks the `#link()` URLs written into any data file,
+not just publication IDs and meta contacts.
+
+### Fixed
+
+- **URLs written as `#link("url")[label]` were never health-checked.** `mk()`
+  evals Typst markup, so a link is legal in any field routed through it — a
+  service `venue`, an appointment `program`, an honor `award`, a note body. The
+  verifier only ever walked publications.yml IDs / `open_access` / media-outlet
+  URLs and meta.yml contacts, so every one of those links was published and left
+  to rot unnoticed. Run against a real corpus, the new collector immediately
+  surfaced links in three files the verifier had never opened — including
+  meta.yml's own address, which is `#link()` markup rather than the bare-URL
+  `contacts[].text` the old collector recognised.
+
+  The scan is over RAW YAML TEXT rather than parsed fields, on purpose:
+  enumerating the mk()-routed fields per schema is a treadmill that silently
+  misses the next field added, which is the same class of bug. Comment lines are
+  skipped so the schema docstrings' placeholder examples are not reported as dead
+  links, and non-http targets (`mailto:`, relative paths, a literal `url`) are
+  dropped by the same predicate the other collectors use.
+
+  `collect_all_urls()` gains a `data_dir` keyword; existing callers are
+  unaffected.
+
 ## 1.2.6
 
 A `web` column and its own filter on the section list. Fixes a reported bug: the
