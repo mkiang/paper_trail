@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import socket
 import ssl
 import urllib.error
@@ -161,8 +162,53 @@ def collect_meta_urls(meta_path: Path | None = None) -> Iterator[UrlEntry]:
             yield UrlEntry(str(text).strip(), f"meta.yml:contacts[{ci}].text")
 
 
+# `#link("https://...")[label]` — the markup vocabulary that any mk()-routed
+# field accepts. Kept identical to markup_convert._LINK_RE; duplicated rather
+# than imported so a URL walk never drags in the HTML/Markdown export path.
+_MARKUP_LINK_RE = re.compile(r'#link\("([^"]*)"\)\[')
+
+# A YAML comment line. Schema docstrings demonstrate the #link() form with a
+# placeholder, so scanning them would report `url` as a dead link every run.
+_YAML_COMMENT_RE = re.compile(r"^\s*#")
+
+
+def collect_markup_link_urls(data_dir: Path | None = None) -> Iterator[UrlEntry]:
+    """Yield every `#link("url")[...]` URL written into any data/*.yml.
+
+    Deliberately a RAW TEXT scan, not a walk over parsed fields. mk() evals
+    Typst markup, so a link is legal in any field routed through it — role,
+    venue, extras[], notes[].text, program, award, degree, department, and
+    whatever a future schema adds. Enumerating those per-schema is a
+    maintenance treadmill that silently misses the next one, which is the
+    blind spot this collector exists to close; a text scan cannot go stale.
+
+    Comment lines are skipped (the schema docstrings show the form with a
+    placeholder URL) and non-http values are dropped by the same predicate
+    the other collectors use, so a literal `#link("url")[label]` in prose
+    costs nothing either way.
+    """
+    d = data_dir or (ROOT / "data")
+    if not d.is_dir():
+        return
+    for path in sorted(d.glob("*.yml")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if _YAML_COMMENT_RE.match(line):
+                continue
+            for m in _MARKUP_LINK_RE.finditer(line):
+                url = m.group(1).strip()
+                if _is_url_string(url):
+                    yield UrlEntry(url, f"{path.name}:{lineno}:#link")
+
+
 def collect_all_urls(
-    *, pubs_path: Path | None = None, meta_path: Path | None = None
+    *,
+    pubs_path: Path | None = None,
+    meta_path: Path | None = None,
+    data_dir: Path | None = None,
 ) -> list[UrlEntry]:
     """Aggregate everything (deduped by URL, sources preserved separately)."""
     entries: list[UrlEntry] = []
@@ -171,6 +217,7 @@ def collect_all_urls(
     _, data = yaml_io.load(pp)
     entries.extend(collect_publication_urls(data, sch))
     entries.extend(collect_meta_urls(meta_path))
+    entries.extend(collect_markup_link_urls(data_dir))
     return entries
 
 
@@ -378,12 +425,21 @@ def verify_all(
     cache: UrlCache | None = None,
     pubs_path: Path | None = None,
     meta_path: Path | None = None,
+    data_dir: Path | None = None,
     on_progress: Callable[[int, int, CheckResult], None] | None = None,
 ) -> Report:
-    """Collect → dedupe → check (skipping cache hits) → return Report."""
+    """Collect → dedupe → check (skipping cache hits) → return Report.
+
+    Passing `pubs_path` is how a caller says "use THIS corpus, not the live
+    one", so an unset `data_dir` follows it to the same directory rather than
+    falling back to the real `data/`. Without that, isolating the first two
+    paths would silently leave the markup-link scan reading the filesystem.
+    """
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")
     cache = cache or UrlCache(ttl_days=ttl_days)
-    entries = collect_all_urls(pubs_path=pubs_path, meta_path=meta_path)
+    if data_dir is None and pubs_path is not None:
+        data_dir = Path(pubs_path).parent
+    entries = collect_all_urls(pubs_path=pubs_path, meta_path=meta_path, data_dir=data_dir)
 
     sources_by_url: dict[str, list[str]] = {}
     for e in entries:
