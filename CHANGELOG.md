@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.3.1
+
+Completes 1.3.0. The three header scalars the renderer hard-accesses can no
+longer be blanked from the Meta form.
+
+### Fixed
+
+- **`position`, `department` and `institution` are now `required`.** All three
+  are read at `templates/bespoke/render.typ:333-335` with no fallback, so an
+  empty submission popped the key and produced no PDF — the same failure mode
+  1.3.0 fixed for `address` and `footer`, on fields 1.3.0 left alone.
+
+  The data was already safe: `yaml_io._validate_meta_data` refuses the write
+  and the route returns 400 with the file untouched. What was missing was a
+  *useful* refusal — a per-field inline error instead of a flash and a
+  redirect.
+
+  `required` is correct here and wrong for `address`, and the distinction is
+  now pinned by a test rather than left to memory:
+  `scaffold._blank_meta_body()` fills these three from
+  `BLANK_META_PLACEHOLDERS`, but writes `address: []` — so marking `address`
+  required reds the blank-tree check (`data_check` files "required" as a
+  WARNING at all severities). Lists use the non-destructive
+  `renderer_required` flag, which guards the KEY without asserting
+  non-emptiness.
+
 ## 1.3.0
 
 The Meta form could destroy `data/meta.yml`. A field's declared type and its
