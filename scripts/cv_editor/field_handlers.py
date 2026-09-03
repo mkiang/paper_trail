@@ -94,6 +94,14 @@ def _apply_string_list(form: dict, f: dict, entry: CommentedMap) -> None:
     items = [s.strip() for s in (form.get(name) or []) if (s or "").strip()]
     if items:
         entry[name] = CommentedSeq(items)
+    elif f.get("renderer_required"):
+        # NON-DESTRUCTIVE: the renderer hard-accesses this key, so popping it is
+        # a no-PDF failure rather than a tidy-up. `..meta.address` is a Typst
+        # SPREAD -- an absent key fails the build exactly as hard as a
+        # stringified one. Write the empty list and let yaml_io's pre-write
+        # guard and data_check speak about emptiness; they check PRESENCE, and
+        # `address: []` is legitimately what a blank scaffold contains.
+        entry[name] = CommentedSeq()
     else:
         entry.pop(name, None)
 
@@ -304,6 +312,86 @@ def _validate_open_access_dict(v: Any, f: dict) -> str | None:
 
 def _validate_noop(v: Any, f: dict) -> str | None:
     return None
+
+
+# ---- shape classes --------------------------------------------------
+#
+# Which concrete Python shapes each field TYPE can represent on disk. This
+# exists because the declared type and the data shape silently disagreed for
+# two meta fields and nothing objected: `entry_edit.html` renders a scalar
+# widget's value with bare Jinja `{{ }}`, so a list or a mapping arrived as its
+# Python repr and the next save stored that repr as a string (gotcha #96).
+#
+# A field may legitimately permit MORE than one shape -- `self_bold` is
+# documented as a string OR a list of names -- so this maps to a frozenset,
+# never a single class.
+#
+# ABSENCE IS ALWAYS COMPATIBLE. The check fires only on a value that is
+# PRESENT and of the wrong concrete type. 33 of 104 publications in the real
+# corpus carry no `open_access` and 17 carry no `notes`; a guard that treated
+# missing as a mismatch would take the edit form down for a third of the
+# corpus with no user action.
+SCALAR = "scalar"
+LIST = "list"
+MAPPING = "mapping"
+
+SHAPE_CLASSES: dict[str, frozenset[str]] = {
+    "text": frozenset({SCALAR}),
+    "textarea": frozenset({SCALAR}),
+    "string": frozenset({SCALAR}),
+    "select": frozenset({SCALAR}),
+    "int": frozenset({SCALAR}),
+    "bool": frozenset({SCALAR}),
+    "grant_amount": frozenset({SCALAR}),
+    "string_list": frozenset({LIST}),
+    "audiences_set": frozenset({LIST}),
+    "author_list": frozenset({LIST}),
+    "typed_notes": frozenset({LIST}),
+    "simple_notes": frozenset({LIST}),
+    "open_access_dict": frozenset({MAPPING}),
+}
+
+# Per-FIELD override, for fields the renderer accepts in more than one shape.
+# Keyed "<section>.<field>".
+FIELD_SHAPE_OVERRIDES: dict[str, frozenset[str]] = {
+    # data/meta.yml documents `self_bold` as "string OR list of strings", and
+    # both renderers plus export_core accept either.
+    "meta.self_bold": frozenset({SCALAR, LIST}),
+}
+
+
+def observed_shape(value) -> str | None:
+    """The shape class of a value, or None when absent (always compatible)."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return MAPPING
+    if isinstance(value, (list, tuple)):
+        return LIST
+    return SCALAR
+
+
+def permitted_shapes(section_key: str, f: dict) -> frozenset[str]:
+    override = FIELD_SHAPE_OVERRIDES.get(f"{section_key}.{f['name']}")
+    if override is not None:
+        return override
+    return SHAPE_CLASSES[f["type"]]
+
+
+def shape_mismatch(section_key: str, f: dict, value) -> str | None:
+    """`None` if `value` is representable by `f`'s declared type, else why not."""
+    seen = observed_shape(value)
+    if seen is None:
+        return None
+    allowed = permitted_shapes(section_key, f)
+    if seen in allowed:
+        return None
+    return (
+        f"stored as a {seen}, but the `{f['type']}` field type edits a "
+        f"{'/'.join(sorted(allowed))}. Editing it here would overwrite the value "
+        f"with its Python repr, so the field is shown read-only. Fix it in "
+        f"data/{section_key}.yml by hand, or restore from Backups."
+    )
 
 
 # ---- registry -------------------------------------------------------

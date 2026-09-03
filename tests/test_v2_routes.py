@@ -10,11 +10,11 @@ Covers:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 import yaml as pyyaml
+from _engine_guards import form_body_from_get
 from cv_editor import paths, yaml_io
 from cv_editor.app import create_app
 
@@ -161,36 +161,103 @@ def test_research_support_save_round_trips(client):
 
 
 def test_meta_save_idempotent_round_trip(client):
-    """Save meta with no changes — file should round-trip without losing
-    the docstring or section comments."""
+    """A no-change save of the Meta form must leave meta.yml BYTE-IDENTICAL.
+
+    THIS TEST USED TO ENCODE THE BUG IT WAS NAMED FOR. It built its body with
+    `form[fname] = str(v)` over a field list that included `address` (a YAML
+    list) and `footer` (a mapping) -- performing the very stringification the
+    save path was being blamed for -- and then asserted only that
+    `build_variants:` and a leading `#` survived. It was green whether or not
+    the save flattened both fields, and it self-restored from a snapshot, so
+    the corruption canary never fired either. See gotcha #96.
+
+    Two properties fix that, and both matter:
+
+    1. The body is derived from the GET, the way a browser builds it, so a
+       regression in the TEMPLATE is visible. A hand-built body cannot see one:
+       the repr lands in the widget's value, not in the JSON block.
+    2. The assertion is a SUCCESSFUL save AND byte-identity, in that order.
+       Byte-identity alone is satisfied by a REFUSED write, which would let a
+       guard regression pass as "nothing changed".
+    """
     meta = paths.data_dir() / "meta.yml"
     snapshot = meta.read_bytes()
     try:
-        _, data = yaml_io.load(meta)
-        mtime = yaml_io.mtime_ns(meta)
-        form = {"mtime_ns": str(mtime), "mode": "edit"}
-        for fname in (
-            "name",
-            "position",
-            "department",
-            "institution",
-            "address",
-            "email",
-            "phone",
-            "website",
-            "footer",
-            "self_bold",
-        ):
-            v = data.get(fname)
-            form[fname] = "" if v is None else str(v)
-        form["sections_json"] = json.dumps(list(data.get("sections", [])))
+        body = client.get("/meta/edit").get_data(as_text=True)
+        form = form_body_from_get(body)
+        form["mtime_ns"] = str(yaml_io.mtime_ns(meta))
+        form["mode"] = "edit"
+
         resp = client.post("/meta/save", data=form, follow_redirects=False)
-        assert resp.status_code in (302, 303)
-        # The build_variants block (NOT in the meta schema yet) MUST survive.
-        new_text = meta.read_text()
-        assert "build_variants:" in new_text, "meta.yml lost build_variants block"
-        # The leading docstring (## Conventions ...) MUST survive.
-        assert new_text.startswith("#"), "meta.yml lost leading docstring"
+        # Successful save FIRST -- see the docstring.
+        assert resp.status_code in (302, 303), (
+            f"expected a successful save, got {resp.status_code}. A refusal would "
+            f"satisfy the byte-identity assertion below for the wrong reason."
+        )
+        assert meta.read_bytes() == snapshot, (
+            "a no-change Meta save rewrote meta.yml. This is the gotcha #96 "
+            "regression: check whether a non-scalar field is being rendered "
+            "into a scalar widget, or a *_json field is posting empty."
+        )
+    finally:
+        meta.write_bytes(snapshot)
+
+
+def test_meta_save_preserves_the_non_scalar_shapes(client):
+    """The shapes themselves, asserted by type rather than by bytes.
+
+    Byte-identity above is the strong assertion, but it fails as one big blob.
+    This one names WHICH invariant broke, and pins the two observables from the
+    original incident: `address` stayed a list, `footer` stayed a mapping, and
+    `show_on_first_page` is still an UNQUOTED YAML bool -- the capital-`F`
+    Python `False` in a quoted string was the visible symptom on disk.
+    """
+    meta = paths.data_dir() / "meta.yml"
+    snapshot = meta.read_bytes()
+    try:
+        body = client.get("/meta/edit").get_data(as_text=True)
+        form = form_body_from_get(body)
+        form["mtime_ns"] = str(yaml_io.mtime_ns(meta))
+        form["mode"] = "edit"
+        assert client.post("/meta/save", data=form).status_code in (302, 303)
+
+        _, after = yaml_io.load(meta)
+        assert isinstance(after["address"], list), (
+            f"address is {type(after['address']).__name__}; `..meta.address` is a "
+            f"Typst spread, so a string here is a hard no-PDF build failure"
+        )
+        assert isinstance(after["footer"], dict)
+        assert isinstance(after["footer"]["show_on_first_page"], bool)
+
+        text = meta.read_text()
+        assert "show_on_first_page: false" in text, "the bool was persisted quoted"
+        for signature in ("ordereddict(", "CommentedSeq(", "CommentedMap("):
+            assert signature not in text, f"a Python repr reached the file: {signature}"
+    finally:
+        meta.write_bytes(snapshot)
+
+
+def test_meta_save_refuses_to_empty_a_renderer_required_field(client):
+    """Emptying `address` from the form is refused, and nothing is written.
+
+    `renderer_required` keeps the KEY (an absent one fails the Typst spread),
+    which turned the old deleter into a silent EMPTIER -- key present, content
+    gone, build green, header lines missing. What the file may legitimately
+    contain (`address: []`, which a blank scaffold writes) is not what a form
+    may submit.
+    """
+    meta = paths.data_dir() / "meta.yml"
+    snapshot = meta.read_bytes()
+    try:
+        body = client.get("/meta/edit").get_data(as_text=True)
+        form = form_body_from_get(body)
+        form["mtime_ns"] = str(yaml_io.mtime_ns(meta))
+        form["mode"] = "edit"
+        form["address_json"] = "[]"
+
+        resp = client.post("/meta/save", data=form, follow_redirects=False)
+        assert resp.status_code == 400
+        assert meta.read_bytes() == snapshot, "a refused save still wrote"
     finally:
         meta.write_bytes(snapshot)
 
@@ -228,3 +295,101 @@ def test_teaching_cluster_save_round_trips(client):
         assert parsed[0]["entries"][0]["role"] == e0.get("role")
     finally:
         teach.write_bytes(snapshot)
+
+
+# ---- /meta/footer (gotcha #96) -------------------------------------------
+
+
+def _footer_post(client, meta, **overrides):
+    form = {"mtime_ns": str(yaml_io.mtime_ns(meta))}
+    form.update(overrides)
+    return client.post("/meta/footer/save", data=form, follow_redirects=False)
+
+
+def test_meta_footer_save_writes_a_mapping_with_a_real_bool(client):
+    """The footer round-trips as a MAPPING, and the bool stays a bool.
+
+    Both halves are no-PDF failures when wrong, and neither is hypothetical:
+    the original incident persisted the whole mapping as a string, and the
+    obvious "quote everything" fix would persist `show_on_first_page` as a
+    string. `pick_style` returns non-str values untouched, so a wrapper there
+    survives normalization -- and both templates use the value in a boolean
+    context (`page-num > 1 or show-on-first`), which is a hard Typst type
+    error, not a cosmetic one.
+    """
+    meta = paths.data_dir() / "meta.yml"
+    snapshot = meta.read_bytes()
+    try:
+        resp = _footer_post(
+            client,
+            meta,
+            template="Test Person (Curriculum Vitae --- {date})",
+            date_format="[month repr:long] [year]",
+            show_on_first_page="on",
+        )
+        assert resp.status_code in (302, 303)
+
+        _, after = yaml_io.load(meta)
+        footer = after["footer"]
+        assert isinstance(footer, dict), f"footer persisted as {type(footer).__name__}"
+        assert footer["template"].startswith("Test Person")
+        assert isinstance(footer["show_on_first_page"], bool), (
+            f"show_on_first_page persisted as {type(footer['show_on_first_page']).__name__}; "
+            f"the templates use it in a boolean context"
+        )
+        assert footer["show_on_first_page"] is True
+
+        text = meta.read_text()
+        assert "show_on_first_page: true" in text, "the bool was persisted quoted"
+        assert "show_on_first_page: 'true'" not in text
+        assert 'show_on_first_page: "true"' not in text
+    finally:
+        meta.write_bytes(snapshot)
+
+
+def test_meta_footer_save_keeps_both_hard_accessed_keys_on_a_blank_submit(client):
+    """A blank `date_format` falls back to disk; the key never disappears.
+
+    `bespoke/lib/styles.typ:62` and `:64` read `.date_format` and `.template`
+    with no `.at()` default, so a mapping missing either one produces no PDF.
+    """
+    meta = paths.data_dir() / "meta.yml"
+    snapshot = meta.read_bytes()
+    try:
+        _, before = yaml_io.load(meta)
+        was = dict(before["footer"])
+
+        resp = _footer_post(client, meta, template="", date_format="", show_on_first_page="")
+        assert resp.status_code in (302, 303)
+
+        _, after = yaml_io.load(meta)
+        assert set(after["footer"]) >= {"template", "date_format"}
+        assert after["footer"]["template"] == was["template"]
+        assert after["footer"]["date_format"] == was["date_format"]
+    finally:
+        meta.write_bytes(snapshot)
+
+
+def test_meta_footer_save_rejects_a_non_typst_date_format_and_writes_nothing(client):
+    meta = paths.data_dir() / "meta.yml"
+    snapshot = meta.read_bytes()
+    try:
+        resp = _footer_post(
+            client, meta, template="X ({date})", date_format="Month Year", show_on_first_page=""
+        )
+        assert resp.status_code == 400
+        assert meta.read_bytes() == snapshot, "a rejected footer save still wrote"
+    finally:
+        meta.write_bytes(snapshot)
+
+
+def test_meta_footer_is_reachable_and_linked_from_meta(client):
+    """The route is UNGATED, and /meta links to it.
+
+    `footer` is no longer in `META["fields"]`, so `meta_view.html`'s field loop
+    cannot render it -- without an explicit row and link it vanishes from the
+    editor with no replacement, reachable only by typing the URL.
+    """
+    assert client.get("/meta/footer").status_code == 200
+    body = client.get("/meta").get_data(as_text=True)
+    assert "/meta/footer" in body, "/meta does not link to the footer editor"

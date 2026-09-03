@@ -57,7 +57,7 @@ Highlights of the module map:
 
 | Concern | Module |
 |---|---|
-| Round-trip YAML writes | `yaml_io.py` |
+| Round-trip YAML writes + pre-write shape guards | `yaml_io.py` |
 | Per-section field schemas | `schemas.py` |
 | Structure-aware navigation | `sections.py` |
 | Form field <-> YAML dispatch | `field_handlers.py` |
@@ -90,6 +90,37 @@ Highlights of the module map:
 - **Self-bolding.** The renderer auto-bolds every occurrence of the configured
   author name (`meta.self_bold`). Store the name plain in YAML — never with
   markup.
+- **A field's declared `type:` must match its data shape.** This is not a
+  style rule; violating it destroys data. `entry_edit.html` interpolates a
+  scalar widget's value with bare `{{ }}`, so a list or a mapping under a
+  `text`/`textarea` declaration renders as its Python `repr()`, the browser
+  submits that text back, and the handler stores it — correctly, because by
+  then it really is a string. The repr is manufactured at RENDER time; a
+  stricter handler cannot see it. `field_handlers.SHAPE_CLASSES` is the
+  registry, `FIELD_SHAPE_OVERRIDES` covers fields the renderer accepts in more
+  than one shape, and absence is compatible with everything.
+- **Never raise from a view against user data.** This package registers no
+  `errorhandler`, so an exception in a route is a bare 500 — and for
+  `meta.yml` that 500 lands on the edit form, which is the screen that repairs
+  the file. Refuse through the `errors` dict the save route already re-renders
+  at 400, or render the field read-only. Reserve raising for developer input,
+  where `assert_schemas_covered` does it at import time and can only break a
+  build the developer just broke.
+- **A package-resident constant may not live in `tests/`.** `tests/` has no
+  `__init__.py` and is excluded from the wheel, so importing from it works
+  under pytest and nowhere else — a failure mode invisible to CI. It also may
+  not live in `schemas.py`, which runs data-reading widen hooks at import: an
+  edge from `yaml_io` into `schemas` leaves the topic-tag vocabulary silently
+  empty when `yaml_io` is imported first. Leaf modules only.
+- **Adding or removing a field type touches nine sites** and only one is
+  enforced by `assert_schemas_covered` (that a handler exists). The others are
+  the prose docstring in `schemas.py`, the `f.type` chains in
+  `entry_edit.html` / `entry_view.html` / `meta_view.html`, the JS mount list,
+  `data_check._MARKUP_FIELD_TYPES`, `app._derive_form_view_state`,
+  `SHAPE_CLASSES`, and the declared type→mount map. `tests/
+  test_field_type_coupling.py` derives all of it rather than restating it.
+  Note that a field MOVING between a markup and a non-markup type silently
+  gains or loses the unescaped-`$` build-breaker scan.
 
 ## Security boundary
 

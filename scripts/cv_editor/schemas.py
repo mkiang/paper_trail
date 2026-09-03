@@ -604,15 +604,21 @@ META = {
         {"name": "department", "type": "text", "label": "Department"},
         {"name": "institution", "type": "text", "label": "Institution"},
         {
+            # A YAML LIST of lines, one per address row -- NOT a scalar. It was
+            # declared `textarea` until 1.3.0, which made entry_edit.html render
+            # the list's Python repr into the widget and the next save store that
+            # repr as a string; `..meta.address` is a Typst spread, so the build
+            # failed with no PDF at all. `renderer_required` keeps an empty
+            # submission from POPPING the key, which is equally fatal.
             "name": "address",
-            "type": "textarea",
-            "label": "Address",
-            "placeholder": "Multi-line postal address",
+            "type": "string_list",
+            "label": "Address (one line per row)",
+            "renderer_required": True,
+            "placeholder": "One postal address line per row",
         },
         {"name": "email", "type": "text", "label": "Email"},
         {"name": "phone", "type": "text", "label": "Phone"},
         {"name": "website", "type": "text", "label": "Website"},
-        {"name": "footer", "type": "textarea", "label": "Footer text"},
         {
             "name": "self_bold",
             "type": "text",
@@ -623,12 +629,21 @@ META = {
         {
             "name": "sections",
             "type": "string_list",
+            "renderer_required": True,
             "label": "Section order (one per line)",
             "placeholder": "e.g., education, appointments, publications, ...",
         },
     ],
 }
 
+
+# `meta_view.html` renders a field with one of exactly two branches
+# (`string_list`, `textarea`) and an `<code>{{ v }}</code>` else, so any other
+# type in META prints its Python repr on the page the owner lands on -- which is
+# how gotcha #96 started. `footer` is edited by its own /meta/footer route
+# precisely so no scalar widget can render over a mapping again. Keep this set
+# tight rather than widening meta_view's chain.
+META_ALLOWED_FIELD_TYPES = frozenset({"text", "string_list"})
 
 SCHEMAS = {
     "publications": PUBLICATIONS,

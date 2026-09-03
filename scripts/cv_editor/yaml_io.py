@@ -236,6 +236,119 @@ def _validate_publications_data(data) -> None:
                 )
 
 
+# ---------------------------------------------------------------------------
+# meta.yml shape guard (2026-09-02)
+# ---------------------------------------------------------------------------
+#
+# WHY THE CONSTANT LIVES HERE. It used to be declared in
+# `tests/test_m5_sample_data.py`, which is NOT shipped in the wheel
+# (`pyproject.toml` packages `cv_editor*` only; `tests/` has no
+# `__init__.py`). Production code importing it from there works under
+# pytest and fails everywhere else, so it had to move into the package —
+# and this module rather than `schemas.py`, because `schemas` runs
+# data-reading widen hooks at import time and a `yaml_io -> schemas`
+# edge makes `import cv_editor.yaml_io` first leave the topic-tag
+# vocabulary silently EMPTY. `yaml_io` imports only `paths`; keep it that
+# way. The test now imports this constant instead of declaring it.
+#
+# The renderer consumes every one of these with NO fallback, so a
+# meta.yml missing any of them fails every typst compile.
+RENDERER_REQUIRED_META_KEYS = (
+    "name",
+    "position",
+    "department",
+    "institution",
+    "address",
+    "contacts",
+    "footer",
+    "sections",
+    "build_variants",
+)
+
+# Concrete shape each build-critical meta key must have on disk. `str` here
+# means "a scalar the renderer can interpolate"; bool/int are rejected because
+# every one of these is markup or a path, never a number.
+_META_KEY_SHAPES: dict[str, tuple[type, ...]] = {
+    "name": (str,),
+    "position": (str,),
+    "department": (str,),
+    "institution": (str,),
+    "address": (list,),
+    "contacts": (list,),
+    "footer": (dict,),
+    "sections": (list,),
+    "build_variants": (list,),
+}
+
+# Sub-keys of `footer:` that the renderer hard-accesses with no `.at()`
+# default — `bespoke/lib/styles.typ:62` and `:64`. A footer mapping missing
+# either one is a no-PDF failure, so absence is part of the shape.
+_FOOTER_REQUIRED_SUBKEYS = ("template", "date_format")
+
+
+def _validate_meta_data(data) -> None:
+    """Pre-write shape guard for `data/meta.yml` (2026-09-02).
+
+    Sibling of `_validate_publications_data`, and written for the same
+    reason: a form round-trip persisted a shape the renderer cannot
+    consume, and nothing between the widget and the disk objected.
+
+    The concrete bug: `schemas.META` declared `address` (a YAML list) and
+    `footer` (a mapping) as scalar `textarea` fields, so `entry_edit.html`
+    rendered each one's Python repr into a `<textarea>` and the next save
+    stored that repr as a string. `..meta.address` in the bespoke template
+    is a SPREAD, so the result was `cannot spread string into array` and
+    NO PDF AT ALL — with the form looking perfectly normal.
+
+    THREE THINGS THIS CHECKS, and the third is the one that is easy to get
+    backwards:
+
+    1. Wrong TYPE — the stringify case above.
+    2. Missing KEY — equally fatal, because the accesses are unguarded. A
+       pop is how `_apply_string_list` reacts to an empty submission, so
+       this half is not hypothetical.
+    3. `footer` missing `template` or `date_format`.
+
+    PRESENCE, NOT NON-EMPTINESS. `address: []` and `contacts: []` are
+    legitimate and are exactly what `scaffold._blank_meta_body()` and the
+    example corpora write; a non-empty check here would refuse to write a
+    blank tree.
+
+    Raises `CorruptedShapeError` so the write aborts before the tmp file
+    is renamed. Callers on a request path must catch it — an uncaught
+    raise from a view is a bare 500 on the page that repairs the file.
+    """
+    if not isinstance(data, dict):
+        return
+    for key in RENDERER_REQUIRED_META_KEYS:
+        if key not in data:
+            raise CorruptedShapeError(
+                f"meta.yml is missing `{key}:`, which the renderer consumes with "
+                f"no fallback — the build would fail with no PDF produced. "
+                f"Refusing the write. Repair from Backups, or restore the key by hand."
+            )
+        expected = _META_KEY_SHAPES[key]
+        value = data[key]
+        # bool is a subclass of int, and neither is ever a valid scalar here.
+        wrong_type = not isinstance(value, expected) or isinstance(value, bool)
+        if wrong_type:
+            raise CorruptedShapeError(
+                f"meta.yml `{key}:` has type {type(value).__name__}, expected "
+                f"{' or '.join(t.__name__ for t in expected)} "
+                f"(value: {value!r:.120}). This is the shape the renderer cannot "
+                f"consume; a string where a list belongs fails the build with "
+                f"`cannot spread string into array` and produces no PDF. "
+                f"Refusing the write."
+            )
+    footer = data["footer"]
+    for sub in _FOOTER_REQUIRED_SUBKEYS:
+        if sub not in footer:
+            raise CorruptedShapeError(
+                f"meta.yml `footer:` is missing `{sub}:`, which the renderer "
+                f"hard-accesses with no default. Refusing the write."
+            )
+
+
 def write_with_backup(
     path: Path,
     header: str,
@@ -281,6 +394,8 @@ def write_with_backup(
     # the same author-shape invariant.
     if path.name == "publications.yml":
         _validate_publications_data(data)
+    if path.name == "meta.yml":
+        _validate_meta_data(data)
     try:
         with _lock_for(path):
             if expected_mtime_ns is not None:
@@ -357,6 +472,8 @@ def write_new(path: Path, header: str, data) -> None:
         raise ValueError(f"write_new is YAML-only, got {path.name}")
     if path.name == "publications.yml":
         _validate_publications_data(data)
+    if path.name == "meta.yml":
+        _validate_meta_data(data)
     try:
         with _lock_for(path):
             if path.exists():

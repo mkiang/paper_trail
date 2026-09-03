@@ -66,6 +66,70 @@ def validate_entry(form_data: dict, fields: list[dict]) -> dict[str, str]:
     return errors
 
 
+def validate_shapes(fields: list[dict], existing, section_key: str) -> dict[str, str]:
+    """Tier 2 of the shape guard (gotcha #96). Returns {field: error_msg}.
+
+    Deliberately a SEPARATE function rather than a clause inside
+    `validate_entry`, for two reasons. `validate_entry` is called from a dozen
+    sites that have no existing entry to hand, and its signature is
+    `(form_data, fields)` -- it never receives one. And the thing being checked
+    is not the submitted value (a scalar form value is always a `str`) but the
+    value ALREADY ON DISK that the submission would overwrite.
+
+    Runs on `/meta/save` only. That is the one route where the corruption is
+    live: `entry_save` has no existing entry in scope where this loop would go,
+    and its `mode == "new"` and subsection-move branches structurally never
+    have one -- the same limitation `_apply_audiences_set` documents. If a
+    non-meta guard is ever wanted, the site is `entry_save`'s
+    `_form_to_entry(form_data, sch, existing=existing)` inside its own try.
+
+    Feeding the result into the caller's `errors` dict is what keeps this
+    non-raising: `meta_save` already re-renders at 400 with `errors=`, and that
+    re-render builds its entry through `_form_to_entry(..., existing=data)`, so
+    a raise here would take the error page down with the form.
+    """
+    from cv_editor.field_handlers import shape_mismatch
+
+    if not isinstance(existing, dict):
+        return {}
+    errors: dict[str, str] = {}
+    for f in fields:
+        msg = shape_mismatch(section_key, f, existing.get(f["name"]))
+        if msg:
+            errors[f["name"]] = msg
+    return errors
+
+
+def validate_renderer_required(form_data: dict, fields: list[dict]) -> dict[str, str]:
+    """Refuse a FORM submission that empties a `renderer_required` field.
+
+    This is deliberately NOT `required: True`, and the distinction is the whole
+    point. `required` is enforced by `validate_entry`, which `data_check` also
+    runs over file CONTENTS -- and `address: []` is legitimately what
+    `scaffold._blank_meta_body()` writes, so marking it required reds
+    `test_m5_scaffold.py`'s blank-tree assertion.
+
+    What is legitimate in the FILE is not legitimate in a SUBMISSION. An empty
+    `address` on disk means "a blank CV"; an empty `address` arriving from the
+    Meta form means a stale tab, a failed JS mount, or a hand-built POST -- and
+    accepting it silently wipes the header lines. Without this, the pre-1.3.0
+    round-trip test stayed GREEN while destroying the value: `renderer_required`
+    keeps the KEY (so `..meta.address` still spreads and the build passes) and
+    the content is simply gone. A loud deleter became a silent emptier.
+    """
+    errors: dict[str, str] = {}
+    for f in fields:
+        if not f.get("renderer_required"):
+            continue
+        v = form_data.get(f["name"])
+        if v is None or v == "" or v == [] or v == {}:
+            errors[f["name"]] = (
+                "cannot be emptied here — the renderer reads it with no fallback. "
+                "Edit data/meta.yml by hand to blank it deliberately."
+            )
+    return errors
+
+
 def parse_pages_for_storage(s: str) -> str:
     """Pages stored verbatim. The renderer handles display formatting."""
     return s.strip() if s else s

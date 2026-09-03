@@ -46,6 +46,11 @@ WARNING = "warning"
 # unescaped `$` opens math mode and breaks/garbles the build.
 _MARKUP_FIELD_TYPES = frozenset({"text", "textarea"})
 
+# Field types whose ITEMS are rendered through `mk()`. Same hazard as above, one
+# level of nesting down. A field moving between this set and the one above
+# silently gains or loses the bare-`$` guard -- see gotcha #96.
+_MARKUP_ITEM_FIELD_TYPES = frozenset({"string_list"})
+
 # A `$` not immediately preceded by a backslash. Grant amounts (`grant_amount`
 # type, stored as `\$...`) are excluded because they are escaped and not of a
 # markup field type.
@@ -163,6 +168,21 @@ def check_file(section_key: str, path: Path) -> list[Issue]:
         except yaml_io.CorruptedShapeError as e:
             out.append(Issue(ERROR, section_key, canonical, None, "(authors)", "authors", str(e)))
 
+    # meta.yml shape + presence invariant (gotcha #96, 2026-09-02): same
+    # delegation, for the same reason. Deliberately NOT a hand-rolled predicate
+    # over the per-field validator's messages -- that would see the STRINGIFY
+    # case only. The absence case is invisible to the validator, because
+    # `validate_entry` skips optional-and-empty and the loop below skips
+    # `None`, and an absent `address:` fails the Typst build exactly as hard as
+    # a stringified one (`..meta.address` is a spread). Delegating shares the
+    # required-key set with the write guard BY CONSTRUCTION rather than by
+    # convention, so the two cannot drift.
+    if section_key == "meta":
+        try:
+            yaml_io._validate_meta_data(data)
+        except yaml_io.CorruptedShapeError as e:
+            out.append(Issue(ERROR, section_key, canonical, None, "(shape)", None, str(e)))
+
     fields = sch.get("fields", [])
     by_name = {f["name"]: f for f in fields}
 
@@ -206,6 +226,18 @@ def check_file(section_key: str, path: Path) -> list[Issue]:
             # Unescaped `$` in a markup field opens Typst math mode -> build break.
             if ftype in _MARKUP_FIELD_TYPES and isinstance(v, str) and _BARE_DOLLAR.search(v):
                 add(ERROR, fname, r"unescaped '$' opens Typst math mode — write '\$'")
+            # Same build-breaker, one level down. `meta.address` moved from
+            # `textarea` to `string_list` in 1.3.0 and would otherwise have
+            # dropped silently out of the scan above -- a field whose items ARE
+            # eval'd as markup losing its guard because its TYPE changed.
+            if ftype in _MARKUP_ITEM_FIELD_TYPES and isinstance(v, list):
+                for i, item in enumerate(v):
+                    if isinstance(item, str) and _BARE_DOLLAR.search(item):
+                        add(
+                            ERROR,
+                            fname,
+                            rf"row {i + 1}: unescaped '$' opens Typst math mode — write '\$'",
+                        )
             # Quoted-numeric coercion: pmid/volume/issue are `string` type but
             # got loaded as a bare number (unquoted in YAML).
             if ftype == "string" and isinstance(v, int) and not isinstance(v, bool):
