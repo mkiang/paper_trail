@@ -94,6 +94,14 @@ def _apply_string_list(form: dict, f: dict, entry: CommentedMap) -> None:
     items = [s.strip() for s in (form.get(name) or []) if (s or "").strip()]
     if items:
         entry[name] = CommentedSeq(items)
+    elif f.get("renderer_required"):
+        # NON-DESTRUCTIVE: the renderer hard-accesses this key, so popping it is
+        # a no-PDF failure rather than a tidy-up. `..meta.address` is a Typst
+        # SPREAD -- an absent key fails the build exactly as hard as a
+        # stringified one. Write the empty list and let yaml_io's pre-write
+        # guard and data_check speak about emptiness; they check PRESENCE, and
+        # `address: []` is legitimately what a blank scaffold contains.
+        entry[name] = CommentedSeq()
     else:
         entry.pop(name, None)
 

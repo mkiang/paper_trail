@@ -588,6 +588,16 @@ def create_app(data_dir=None, project_root=None) -> Flask:
         for f in sch["fields"]:
             if f["type"] in ("string_list", "audiences_set"):
                 v = entry.get(f["name"])
+                # A `str` here means the value is ALREADY corrupted (a list
+                # flattened to its repr by the pre-1.3.0 textarea widget). A
+                # Python str iterates as CHARACTERS, so the naive comprehension
+                # would offer ~200 one-character rows and the next save would
+                # write them back -- strictly worse than the corruption we are
+                # recovering from, and precisely the task-#30 recurrence shape
+                # documented in yaml_io._validate_publications_data. Coerce to a
+                # single row instead, mirroring _apply_author_list's guard.
+                if isinstance(v, str):
+                    v = [v]
                 state["list_field_data"][f["name"]] = [str(s) for s in (v or [])]
             elif f["type"] == "grant_amount":
                 v = entry.get(f["name"])
