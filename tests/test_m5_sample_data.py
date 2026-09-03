@@ -51,18 +51,12 @@ SECTION_FILES = [
 # it is @real_corpus_required and excluded from the public export.
 
 # Keys templates/bespoke/render.typ:render-header + templates/bespoke/lib/styles.typ:setup
-# consume with NO fallback — a meta.yml missing any of these fails every typst compile.
-RENDERER_REQUIRED_META_KEYS = [
-    "name",
-    "position",
-    "department",
-    "institution",
-    "address",
-    "contacts",
-    "footer",
-    "sections",
-    "build_variants",
-]
+# consume with NO fallback — a meta.yml missing any of these fails every typst
+# compile. DECLARED IN THE PACKAGE, imported here: production code needs it too
+# (yaml_io's pre-write guard and data_check's delegation), and `tests/` is not
+# shipped in the wheel, so a test-module home worked under pytest and nowhere
+# else. See gotcha #96.
+from cv_editor.yaml_io import RENDERER_REQUIRED_META_KEYS  # noqa: E402
 
 
 def _load(path: Path):

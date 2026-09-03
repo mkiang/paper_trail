@@ -3,6 +3,96 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.3.0
+
+The Meta form could destroy `data/meta.yml`. A field's declared type and its
+data shape were allowed to disagree, and when they did, nothing between the
+widget and the disk objected.
+
+### Fixed
+
+- **A save from the Meta form rewrote `address:` and `footer:` as Python
+  `repr()` strings, and the next build produced no PDF at all.** `schemas.META`
+  declared `address` (a YAML list) and `footer` (a mapping) as scalar
+  `textarea` fields, so `entry_edit.html` interpolated each one's ruamel object
+  into a `<textarea>` with bare Jinja `{{ }}`. The browser submitted that text
+  back, `_apply_text` stored it as a scalar — correctly, from its point of view,
+  because by then the value really was a string — and `..meta.address` is a
+  Typst *spread*, so the compile died with `cannot spread string into array`.
+  The form looked normal throughout and the failure surfaced as a missing PDF,
+  which is the worst possible pairing.
+
+  The repr is manufactured at RENDER time, not at save time. That is why the
+  fix is a render-time defence rather than a stricter handler.
+
+- **`address` is now a `string_list`**, with a new per-field
+  `renderer_required` flag that makes `_apply_string_list` write an empty
+  sequence instead of popping the key. An *absent* `address` fails the spread
+  exactly as hard as a stringified one, so the pop was a second no-PDF path.
+  `sections` carries the same flag for the same latent reason.
+
+  Reading that seam is guarded too: a `str` found where the list belongs is
+  coerced to one row rather than iterated, because a Python string iterates as
+  CHARACTERS and the naive path would have offered ~200 one-character rows and
+  written them back — the shape `_validate_publications_data` already documents
+  as the task-#30 recurrence.
+
+- **`footer` has its own page at `/meta/footer`** and is no longer a schema
+  field at all, so no scalar widget can render over a mapping again. Three
+  labelled inputs, both hard-accessed sub-keys always emitted, and the route is
+  deliberately UNGATED — the Typography editor it otherwise mirrors is bound
+  behind `capabilities.typography`, which is False for the `modern` template,
+  and `modern` hard-accesses `meta.footer.template`. Gating it would have made
+  a build-critical field uneditable for every public user.
+
+  `show_on_first_page` is written as a real `bool`. `normalize_yaml_quotes`
+  returns non-`str` values untouched, so quoting it would persist a string, and
+  both templates use it in a boolean context.
+
+### Added
+
+- **A three-tier shape guard.** `field_handlers.SHAPE_CLASSES` maps each field
+  type to the concrete shapes it can edit, with `FIELD_SHAPE_OVERRIDES` for
+  fields the renderer accepts in more than one shape (`meta.self_bold` is
+  documented as a string *or* a list). A missing value is compatible with every
+  shape — the check fires only on a value that is present and of the wrong
+  concrete type.
+
+  At render, a mismatched field is shown READ-ONLY with no form control, so it
+  is absent from the POST and cannot be overwritten; it does not raise, because
+  the edit form is the screen that repairs the file and this package registers
+  no error handler. At save, `validate.validate_shapes` feeds the existing
+  `errors` dict and the route re-renders at 400. And `yaml_io` refuses the write
+  outright, with the refusal caught at every boundary so it can never surface
+  as a 500.
+
+- **`yaml_io._validate_meta_data`**, a sibling of the publications guard,
+  checking type, key presence and `footer`'s two hard-accessed sub-keys.
+  Presence, not non-emptiness: `address: []` is what a blank scaffold writes.
+  `data_check` delegates to it at ERROR severity rather than pattern-matching
+  validator messages, which would have seen the stringify case only.
+
+- **`RENDERER_REQUIRED_META_KEYS` now lives in the package**, not in a test
+  module. `tests/` is not shipped in the wheel, so the old home worked under
+  pytest and nowhere else. It is in `yaml_io` rather than `schemas`, because
+  `schemas` runs data-reading hooks at import and a `yaml_io -> schemas` edge
+  leaves the topic-tag vocabulary silently empty; a test now pins that.
+
+- **Derived guards for the field-type registry's nine coupled sites**, so a
+  tenth cannot be forgotten silently — including that every JSON-backed type
+  has a declared JS mount, and that `meta` uses only the two types
+  `meta_view.html` can actually render.
+
+### Changed
+
+- `test_meta_save_idempotent_round_trip` **was asserting the bug as expected
+  input.** It built its POST body with `str(v)` over the list and the mapping —
+  performing the corruption itself — then checked only that `build_variants:`
+  and a leading comment survived, and restored from a snapshot so the corruption
+  canary never fired. It now derives the body from the GET the way a browser
+  does, and asserts a *successful* save and byte-identity in that order:
+  byte-identity alone is satisfied by a refused write.
+
 ## 1.2.7
 
 `verify_urls` now health-checks the `#link()` URLs written into any data file,

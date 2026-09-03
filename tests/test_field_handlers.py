@@ -6,10 +6,11 @@ import sys
 from pathlib import Path
 
 import pytest
-from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+from cv_editor import field_handlers
 from cv_editor.field_handlers import (
     FIELD_HANDLERS,
     JSON_FIELD_TYPES,
@@ -200,3 +201,61 @@ def test_validate_int_zero_not_treated_as_empty():
     f = {"name": "x", "type": "int", "min": 0, "max": 10}
     errors = validate_entry({"x": 0}, [f])
     assert errors == {}
+
+
+# ---- _apply_text / _apply_string_list ------------------------------------
+#
+# Neither had a test before 1.3.0, which is part of why gotcha #96 shipped:
+# `_apply_text` is the handler for BOTH `text` and `textarea` and it stores
+# `str(v).strip()` unconditionally.
+
+
+def test_apply_text_stores_the_stripped_scalar():
+    entry = CommentedMap()
+    field_handlers._apply_text({"name": "  Jane Q Public  "}, {"name": "name"}, entry)
+    assert entry["name"] == "Jane Q Public"
+
+
+def test_apply_text_pops_an_empty_submission():
+    entry = CommentedMap({"name": "Jane"})
+    field_handlers._apply_text({"name": ""}, {"name": "name"}, entry)
+    assert "name" not in entry
+
+
+def test_apply_text_stringifies_whatever_it_is_given():
+    """Characterization, NOT an endorsement.
+
+    This is the store-side half of gotcha #96 and it is behaving correctly: by
+    the time a handler runs, a scalar form value really is a `str`. The repr is
+    manufactured EARLIER, by the template rendering a non-scalar into a scalar
+    widget. The defence therefore lives at render time (a read-only field) and
+    at save time (`validate.validate_shapes`), not here -- so this test pins
+    what `_apply_text` does rather than pretending it can tell.
+    """
+    entry = CommentedMap()
+    field_handlers._apply_text({"x": ["a", "b"]}, {"name": "x"}, entry)
+    assert entry["x"] == "['a', 'b']"
+
+
+def test_apply_string_list_stores_a_commented_seq_and_strips_blanks():
+    entry = CommentedMap()
+    field_handlers._apply_string_list(
+        {"address": [" line one ", "", "  ", "line two"]}, {"name": "address"}, entry
+    )
+    assert list(entry["address"]) == ["line one", "line two"]
+    assert isinstance(entry["address"], CommentedSeq)
+
+
+def test_apply_string_list_pops_when_empty_unless_renderer_required():
+    entry = CommentedMap({"address": ["a"]})
+    field_handlers._apply_string_list({"address": []}, {"name": "address"}, entry)
+    assert "address" not in entry
+
+    entry = CommentedMap({"address": ["a"]})
+    field_handlers._apply_string_list(
+        {"address": []}, {"name": "address", "renderer_required": True}, entry
+    )
+    assert "address" in entry and list(entry["address"]) == [], (
+        "renderer_required must keep the KEY: `..meta.address` is a Typst spread, "
+        "so an absent key is a hard no-PDF failure"
+    )
