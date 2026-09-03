@@ -596,13 +596,19 @@ META = {
             "placeholder": "e.g., Jane Q Public",
         },
         {
+            # required: the renderer hard-accesses it at
+            # templates/bespoke/render.typ:333-335, so an empty submission pops
+            # the key and produces no PDF -- with the form looking fine. Safe to
+            # mark required because scaffold._blank_meta_body fills all three
+            # from BLANK_META_PLACEHOLDERS, so a blank tree still validates.
             "name": "position",
             "type": "text",
+            "required": True,
             "label": "Position",
             "placeholder": "e.g., Assistant Professor",
         },
-        {"name": "department", "type": "text", "label": "Department"},
-        {"name": "institution", "type": "text", "label": "Institution"},
+        {"name": "department", "type": "text", "required": True, "label": "Department"},
+        {"name": "institution", "type": "text", "required": True, "label": "Institution"},
         {
             # A YAML LIST of lines, one per address row -- NOT a scalar. It was
             # declared `textarea` until 1.3.0, which made entry_edit.html render

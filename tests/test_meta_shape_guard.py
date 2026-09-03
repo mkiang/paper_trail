@@ -119,3 +119,41 @@ def test_importing_yaml_io_first_does_not_empty_the_tag_vocabulary():
         "schemas.TAGS is EMPTY when cv_editor.yaml_io is imported first. "
         "Check for a new module-level cv_editor import in yaml_io.py."
     )
+
+
+def test_required_scalars_do_not_break_the_blank_scaffold():
+    """`required: True` is safe on the three hard-accessed SCALARS, not on the lists.
+
+    The distinction cost a review round. `position`/`department`/`institution`
+    are filled from `BLANK_META_PLACEHOLDERS`, so a blank tree still validates.
+    `address` is NOT -- `_blank_meta_body` writes `address: []` -- so marking it
+    required reds `test_m5_scaffold`'s "blank tree is check_data clean at all
+    severities" assertion, because `data_check` files "required" as a WARNING.
+    That is why `address` uses the non-destructive `renderer_required` flag
+    instead, which guards the KEY without asserting non-emptiness.
+    """
+    from cv_editor import validate
+    from cv_editor.scaffold import _blank_meta_body
+    from cv_editor.schemas import META
+
+    blank = _blank_meta_body()
+    required = [f["name"] for f in META["fields"] if f.get("required")]
+    assert {"position", "department", "institution"} <= set(required)
+
+    for name in required:
+        assert blank.get(name) not in (None, "", [], {}), (
+            f"{name} is required but the blank scaffold leaves it empty; "
+            f"`make init` would produce a tree that fails its own data check"
+        )
+
+    # And the inverse: nothing that the scaffold leaves empty may be required.
+    empty_in_blank = {k for k, v in blank.items() if v in ([], {}, "", None)}
+    assert not (empty_in_blank & set(required)), (
+        f"{sorted(empty_in_blank & set(required))} are required but empty in the "
+        f"blank scaffold. Use `renderer_required` for those instead."
+    )
+
+    errors = validate.validate_entry(
+        {f["name"]: blank.get(f["name"]) for f in META["fields"]}, META["fields"]
+    )
+    assert errors == {}, f"the blank scaffold fails its own validator: {errors}"
