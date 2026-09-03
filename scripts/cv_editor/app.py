@@ -58,6 +58,7 @@ from flask import (
 from ruamel.yaml.comments import CommentedMap
 
 from cv_editor import (
+    field_handlers,
     altmetric_tracker_cache,
     capabilities,
     nav,
@@ -295,6 +296,14 @@ def create_app(data_dir=None, project_root=None) -> Flask:
         except Timeout:
             flash("Another writer holds the file lock; try again in a moment.", "warn")
             return redirect(redirect_to), 409
+        except yaml_io.CorruptedShapeError as e:
+            # The pre-write shape guard refused. It MUST be caught here: an
+            # uncaught raise out of a view is a bare 500 (this package
+            # registers no errorhandler), and for meta.yml that 500 lands on
+            # the page the owner needs to repair the file. 400, not 409 --
+            # nothing is stale, the payload is unacceptable.
+            flash(f"Refusing to write: {e}", "warn")
+            return redirect(redirect_to), 400
 
     # V17-D: collapse the 13+ routes that each open with the same section
     # validation + meta-handling ceremony. on_meta picks how to handle a
@@ -646,8 +655,31 @@ def create_app(data_dir=None, project_root=None) -> Flask:
         self_author_status = state["self_author_status"]
         needs_contribution = state["needs_contribution"]
 
+        # Tier 1 of the shape guard (gotcha #96). A field whose declared type
+        # cannot represent the value on disk is rendered READ-ONLY rather than
+        # as an input, and named in a banner. Read-only is the whole mechanism:
+        # a field absent from the form is absent from the POST, so the apply
+        # handler never sees it and the existing value survives untouched.
+        #
+        # It does NOT raise. `/meta/edit` is the screen that repairs meta.yml
+        # and there is no errorhandler in this package, so a raise here would
+        # 500 the one page the owner needs -- including the 400 re-render,
+        # which builds its entry the same way.
+        shape_locked = {}
+        for f in sch["fields"]:
+            msg = field_handlers.shape_mismatch(section_key, f, entry.get(f["name"]))
+            if msg:
+                shape_locked[f["name"]] = msg
+
         # Active-grant past-end-date warning (research_support only).
         warning = extra_warning
+        if shape_locked and not warning:
+            names = ", ".join(f"`{n}`" for n in sorted(shape_locked))
+            warning = (
+                f"{len(shape_locked)} field(s) shown read-only because the stored "
+                f"value does not match the declared field type: {names}. "
+                f"Saving this form leaves them untouched."
+            )
         if section_key == "research_support":
             check_form = form_data or {f["name"]: entry.get(f["name"]) for f in sch["fields"]}
             w = validate.grant_end_date_warning(check_form)
@@ -687,6 +719,7 @@ def create_app(data_dir=None, project_root=None) -> Flask:
             open_access_form=open_access_form,
             list_field_data=list_field_data,
             amount_display_for=amount_display_for,
+            shape_locked=shape_locked,
             global_idx=global_idx,
             mtime_ns=yaml_io.mtime_ns(path),
             errors=errors or {},

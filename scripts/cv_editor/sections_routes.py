@@ -769,6 +769,11 @@ def register_sections_routes(app: Flask, deps: SectionsDeps) -> None:
         form_data, parse_errors = _form_payload(request, sch)
         errors = validate.validate_entry(form_data, sch["fields"])
         errors.update(parse_errors)
+        # Tier 2 of the shape guard (gotcha #96): refuse to overwrite a value
+        # whose on-disk shape the declared field type cannot represent. Tier 1
+        # already renders those fields read-only, so reaching here means a
+        # stale tab or a hand-built POST.
+        errors.update(validate.validate_shapes(sch["fields"], data, "meta"))
         if errors:
             return _render_edit_form(
                 "meta",

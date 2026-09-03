@@ -437,6 +437,21 @@ def register_style_routes(app: Flask, deps: StyleDeps) -> None:
                 meta,
                 expected_mtime_ns=expected_mtime_ns,
             )
+        except yaml_io.CorruptedShapeError as e:
+            # Its OWN clause, deliberately not folded into the tuple below.
+            # That tuple is the stale-tab recovery branch: it stashes the form
+            # and redirects with a "someone else changed the file, here are
+            # your edits back" banner. A shape refusal is neither -- nothing is
+            # stale and no retry can succeed, because the problem is a key
+            # already on disk that meta.yml's own shape contract rejects.
+            # Reusing that branch would tell the owner to retry an impossible
+            # save. Name the offending keys and point at the repair path.
+            flash(
+                f"Refusing to write meta.yml: {e} "
+                f"Repair it from Backups (which bypasses this guard) or by hand.",
+                "warn",
+            )
+            return redirect(url_for("style_list")), 400
         except (yaml_io.StaleFileError, Timeout) as e:
             idx_for_stash = int(idx_raw) if (mode == "edit" and idx_raw.isdigit()) else None
             token = _style_stash_pending(form, mode, idx_for_stash)

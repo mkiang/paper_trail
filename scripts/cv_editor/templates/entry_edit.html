@@ -138,7 +138,18 @@
       {# V17-D U-M7: outer span#f-<name> gives the error-jump-link an
          anchor target. JSON-field editors don't put the f-<name> id on
          a real <input> so the link used to scroll to nothing. #}
-      {% if f.type == 'author_list' %}
+      {# Tier 1 of the shape guard (gotcha #96): a field whose stored value the
+         declared type cannot represent is rendered READ-ONLY and, crucially,
+         with NO form control -- so it is absent from the POST and the apply
+         handler cannot overwrite it. This branch must stay FIRST; every branch
+         below it interpolates the value into a widget, and three of them do it
+         with a bare `{{ }}` that would print the Python repr. #}
+      {% if shape_locked and f.name in shape_locked %}
+        <span id="f-{{ f.name }}"></span>
+        <pre class="mono shape-locked">{{ entry.get(f.name) }}</pre>
+        <p class="hint"><strong>Read-only.</strong> {{ shape_locked[f.name] }}</p>
+
+      {% elif f.type == 'author_list' %}
         <span id="f-{{ f.name }}"></span>
         <div id="authors-editor" class="authors-editor"></div>
         <button type="button" class="btn-secondary" id="author-add">+ Add author</button>
