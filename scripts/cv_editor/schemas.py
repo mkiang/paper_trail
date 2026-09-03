@@ -619,7 +619,6 @@ META = {
         {"name": "email", "type": "text", "label": "Email"},
         {"name": "phone", "type": "text", "label": "Phone"},
         {"name": "website", "type": "text", "label": "Website"},
-        {"name": "footer", "type": "textarea", "label": "Footer text"},
         {
             "name": "self_bold",
             "type": "text",
@@ -637,6 +636,14 @@ META = {
     ],
 }
 
+
+# `meta_view.html` renders a field with one of exactly two branches
+# (`string_list`, `textarea`) and an `<code>{{ v }}</code>` else, so any other
+# type in META prints its Python repr on the page the owner lands on -- which is
+# how gotcha #96 started. `footer` is edited by its own /meta/footer route
+# precisely so no scalar widget can render over a mapping again. Keep this set
+# tight rather than widening meta_view's chain.
+META_ALLOWED_FIELD_TYPES = frozenset({"text", "string_list"})
 
 SCHEMAS = {
     "publications": PUBLICATIONS,

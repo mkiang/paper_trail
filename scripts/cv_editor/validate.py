@@ -100,6 +100,36 @@ def validate_shapes(fields: list[dict], existing, section_key: str) -> dict[str,
     return errors
 
 
+def validate_renderer_required(form_data: dict, fields: list[dict]) -> dict[str, str]:
+    """Refuse a FORM submission that empties a `renderer_required` field.
+
+    This is deliberately NOT `required: True`, and the distinction is the whole
+    point. `required` is enforced by `validate_entry`, which `data_check` also
+    runs over file CONTENTS -- and `address: []` is legitimately what
+    `scaffold._blank_meta_body()` writes, so marking it required reds
+    `test_m5_scaffold.py`'s blank-tree assertion.
+
+    What is legitimate in the FILE is not legitimate in a SUBMISSION. An empty
+    `address` on disk means "a blank CV"; an empty `address` arriving from the
+    Meta form means a stale tab, a failed JS mount, or a hand-built POST -- and
+    accepting it silently wipes the header lines. Without this, the pre-1.3.0
+    round-trip test stayed GREEN while destroying the value: `renderer_required`
+    keeps the KEY (so `..meta.address` still spreads and the build passes) and
+    the content is simply gone. A loud deleter became a silent emptier.
+    """
+    errors: dict[str, str] = {}
+    for f in fields:
+        if not f.get("renderer_required"):
+            continue
+        v = form_data.get(f["name"])
+        if v is None or v == "" or v == [] or v == {}:
+            errors[f["name"]] = (
+                "cannot be emptied here — the renderer reads it with no fallback. "
+                "Edit data/meta.yml by hand to blank it deliberately."
+            )
+    return errors
+
+
 def parse_pages_for_storage(s: str) -> str:
     """Pages stored verbatim. The renderer handles display formatting."""
     return s.strip() if s else s

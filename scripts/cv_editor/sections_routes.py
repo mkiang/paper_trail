@@ -759,6 +759,103 @@ def register_sections_routes(app: Flask, deps: SectionsDeps) -> None:
             global_idx=None,
         )
 
+    # ---- footer -----------------------------------------------------
+    #
+    # `footer:` is a MAPPING (template / date_format / show_on_first_page) and
+    # gets its own page rather than a field on the Meta form. It used to be
+    # declared a scalar `textarea`, so entry_edit.html rendered the mapping's
+    # Python repr into the widget and the next save stored that repr as a
+    # string -- and both templates hard-access `.template` and `.date_format`
+    # with no default, so the result was no PDF at all (gotcha #96).
+    #
+    # UNGATED, deliberately. The Typography editor this mirrors is bound
+    # through `app.route if deps.capabilities.typography else _skip_route`, and
+    # `capabilities.load("modern")` is all-False -- copying that gate would
+    # leave a build-critical field unreachable for every public user of the
+    # `modern` template, which hard-accesses meta.footer.template.
+    @app.route("/meta/footer")
+    def meta_footer():
+        _, path, _, data = _load_section("meta")
+        footer = data.get("footer") if isinstance(data, dict) else None
+        return render_template(
+            "meta_footer.html",
+            footer=footer if isinstance(footer, dict) else {},
+            errors={},
+            mtime_ns=yaml_io.mtime_ns(path),
+        )
+
+    @app.route("/meta/footer/save", methods=["POST"])
+    def meta_footer_save():
+        _, path, header, data = _load_section("meta")
+        expected_mtime_ns = _get_expected_mtime_ns(request)
+        existing = data.get("footer") if isinstance(data, dict) else None
+        existing = existing if isinstance(existing, dict) else {}
+
+        template = (request.form.get("template") or "").strip()
+        date_format = (request.form.get("date_format") or "").strip()
+        show_on_first = request.form.get("show_on_first_page") == "on"
+
+        errors: dict[str, str] = {}
+        # ALWAYS EMIT BOTH STRINGS. bespoke/lib/styles.typ:62 and :64 read
+        # `.date_format` and `.template` with no `.at()` default, so a mapping
+        # missing either one is a no-PDF failure. A blank submission falls back
+        # to what is already on disk; only a blank with nothing to fall back to
+        # is an error.
+        if not template:
+            template = str(existing.get("template") or "").strip()
+            if not template:
+                errors["template"] = "required - the renderer reads it with no fallback"
+        if not date_format:
+            date_format = str(existing.get("date_format") or "").strip()
+            if not date_format:
+                errors["date_format"] = "required - the renderer reads it with no fallback"
+        if date_format and "[" not in date_format:
+            errors["date_format"] = (
+                "must be a Typst datetime format, e.g. '[month repr:long] [year]'"
+            )
+
+        if errors:
+            return render_template(
+                "meta_footer.html",
+                footer={
+                    "template": template,
+                    "date_format": date_format,
+                    "show_on_first_page": show_on_first,
+                },
+                errors=errors,
+                mtime_ns=yaml_io.mtime_ns(path),
+            ), 400
+
+        # VALUE TYPES ARE LOAD-BEARING HERE.
+        #
+        # `template` and `date_format` are plain `str`: normalize_yaml_quotes
+        # runs on the tmp file inside the write and `pick_style` re-decides
+        # quoting from the value alone (`date_format` is force-DOUBLE because it
+        # opens with `[`), so a ScalarString wrapper is inert for these two.
+        #
+        # `show_on_first_page` must stay a real `bool`. `pick_style` returns
+        # non-str values UNTOUCHED, so wrapping it would persist a quoted
+        # STRING -- and both templates use it in a boolean context
+        # (`page-num > 1 or show-on-first`), which is a hard Typst type error
+        # and therefore no PDF.
+        footer = CommentedMap()
+        footer["template"] = template
+        footer["date_format"] = date_format
+        footer["show_on_first_page"] = bool(show_on_first)
+        data["footer"] = footer
+
+        err = write_or_409(
+            path,
+            header,
+            data,
+            expected_mtime_ns=expected_mtime_ns,
+            redirect_to=url_for("meta_footer"),
+        )
+        if err:
+            return err
+        flash("Footer saved.", "ok")
+        return redirect(url_for("meta_view"))
+
     @app.route("/meta/save", methods=["POST"])
     def meta_save():
         rejection = _js_unmounted_rejection()
@@ -774,6 +871,7 @@ def register_sections_routes(app: Flask, deps: SectionsDeps) -> None:
         # already renders those fields read-only, so reaching here means a
         # stale tab or a hand-built POST.
         errors.update(validate.validate_shapes(sch["fields"], data, "meta"))
+        errors.update(validate.validate_renderer_required(form_data, sch["fields"]))
         if errors:
             return _render_edit_form(
                 "meta",

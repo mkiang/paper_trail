@@ -58,9 +58,9 @@ from flask import (
 from ruamel.yaml.comments import CommentedMap
 
 from cv_editor import (
-    field_handlers,
     altmetric_tracker_cache,
     capabilities,
+    field_handlers,
     nav,
     notes_helpers,
     paths,

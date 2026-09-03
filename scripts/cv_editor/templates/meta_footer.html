@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Footer — CV Editor{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('meta_view') }}">&larr; back to Meta</a></p>
+<h1>Page footer</h1>
+<p class="muted">
+  Three values the renderer reads on every page. <code>template</code> and
+  <code>date_format</code> are consumed with <strong>no fallback</strong>, so
+  neither can be left blank.
+</p>
+
+{% if errors %}
+<div class="banner banner-warn">
+  <strong>Not saved.</strong> Fix the field(s) below.
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('meta_footer_save') }}">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+
+  <div class="field">
+    <label for="f-template">Footer template</label>
+    <input type="text" id="f-template" name="template"
+           value="{{ footer.get('template') or '' }}" size="60">
+    <p class="hint">
+      <code>{date}</code> is substituted at render time. Em-dash via
+      <code>---</code>.
+    </p>
+    {% if errors.template %}<p class="error">{{ errors.template }}</p>{% endif %}
+  </div>
+
+  <div class="field">
+    <label for="f-date_format">Footer date format</label>
+    <input type="text" id="f-date_format" name="date_format"
+           value="{{ footer.get('date_format') or '' }}" size="40">
+    <p class="hint">
+      A Typst datetime format, e.g. <code>[month repr:long] [year]</code>.
+    </p>
+    {% if errors.date_format %}<p class="error">{{ errors.date_format }}</p>{% endif %}
+  </div>
+
+  <div class="field">
+    <label for="f-show_on_first_page">
+      <input type="checkbox" id="f-show_on_first_page" name="show_on_first_page"
+             {% if footer.get('show_on_first_page') %}checked{% endif %}>
+      Show footer on first page
+    </label>
+    <p class="hint">Off by default; the footer starts on page 2.</p>
+  </div>
+
+  <div class="save-bar">
+    <button type="submit" class="btn-primary">Save footer</button>
+    <a href="{{ url_for('meta_view') }}" class="btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

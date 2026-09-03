@@ -11,6 +11,22 @@
 </div>
 
 <dl class="entry">
+  {# `footer:` is a MAPPING and is edited on its own page, so it is NOT in
+     META["fields"] and the loop below cannot render it. Without this row it
+     would vanish from the editor entirely. #}
+  <dt>Footer</dt>
+  <dd>
+    {% if entry.get('footer') %}
+      <code>{{ entry['footer'].get('template') }}</code>
+      <span class="muted">·</span>
+      <code>{{ entry['footer'].get('date_format') }}</code>
+      <span class="muted">·</span>
+      first page: <code>{{ 'yes' if entry['footer'].get('show_on_first_page') else 'no' }}</code>
+    {% else %}
+      <span class="muted">not set</span>
+    {% endif %}
+    <br><a href="{{ url_for('meta_footer') }}">Edit footer</a>
+  </dd>
   {% for f in fields %}
     {% set v = entry.get(f.name) %}
     {% if v is not none and v != '' and v != [] and v != {} %}

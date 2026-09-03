@@ -48,6 +48,12 @@ _PUBLIC_ENDPOINTS = (
     "publication_rename_author",
     "publication_import",
     "publication_promote",
+    # gotcha #96: the footer editor must stay reachable under `modern`, which
+    # hard-accesses meta.footer.template with no fallback. Capability-gating it
+    # the way the Typography editor is gated would make a build-critical field
+    # uneditable for every public user.
+    "meta_footer",
+    "meta_footer_save",
 )
 
 

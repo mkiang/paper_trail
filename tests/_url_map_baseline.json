@@ -135,6 +135,16 @@
     "GET"
   ],
   [
+    "/meta/footer",
+    "meta_footer",
+    "GET"
+  ],
+  [
+    "/meta/footer/save",
+    "meta_footer_save",
+    "POST"
+  ],
+  [
     "/meta/save",
     "meta_save",
     "POST"
