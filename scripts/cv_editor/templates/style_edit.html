@@ -98,6 +98,11 @@
     </label>
 
     <label class="flag-label">
+      <input type="checkbox" name="footer_first_page" {% if form.footer_first_page %}checked{% endif %}>
+      <strong>footer_first_page</strong> — print the dated footer (<em>Curriculum Vitae &mdash; Month Year</em> and the page number) on page 1 of this variant too. Hidden on page 1 by default (<code>footer.show_on_first_page</code> in <code>meta.yml</code>); checking this overrides that setting for this variant only, e.g. for a CV a committee wants dated on its first page. Other variants are unaffected.
+    </label>
+
+    <label class="flag-label">
       <input type="checkbox" name="show_dollars" {% if form.show_dollars %}checked{% endif %}>
       <strong>show_dollars</strong> — show grant dollar amounts. Renderer default is <em>on</em> (dollars visible); uncheck for institution-internal CVs.
     </label>

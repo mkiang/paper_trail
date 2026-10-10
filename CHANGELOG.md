@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## 1.4.0
+
+A variant can now print the dated footer on page 1.
+
+### Added
+
+- **`footer_first_page` build input.** `meta.yml`'s `footer.show_on_first_page`
+  is global, so one variant (a CV a committee wants dated on its first page)
+  could not differ from the rest. `--input footer_first_page=true|false` now
+  overrides it for that variant only; absent, the global setting applies. The
+  `modern` template honours it, and the Style editor gets a checkbox that sets
+  and persists it (`BOOLEAN_INPUTS`, a variant chip, and the form hint).
+
+  A consumer whose template is flattened into a single file (no `--input` at
+  compile time) has to bake the override into the flattened `meta`; reading
+  the input inside the inlined `setup()` alone silently drops it.
+
 ## 1.3.1
 
 Completes 1.3.0. The three header scalars the renderer hard-accesses can no

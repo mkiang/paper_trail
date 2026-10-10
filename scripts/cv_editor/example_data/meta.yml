@@ -108,7 +108,7 @@
 #                                show_contributions, show_notes,
 #                                show_media, show_media_urls,
 #                                show_hidden_media, show_highlighted,
-#                                show_future
+#                                show_future, footer_first_page
 #                              show_dollars + show_media_urls default
 #                              to true; everything else defaults false.
 #                              show_future=true reveals future-dated

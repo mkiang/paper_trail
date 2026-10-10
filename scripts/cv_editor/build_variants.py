@@ -173,6 +173,7 @@ BOOLEAN_INPUTS = (
     "show_hidden_media",
     "show_highlighted",
     "show_future",
+    "footer_first_page",
 )
 # Default-FALSE renderer flags (rendered off unless --input <key>=true).
 # `BOOLEAN_INPUTS` is "default false; checkbox unchecked == renderer default".

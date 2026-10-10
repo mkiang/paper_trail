@@ -47,6 +47,10 @@
     eval(meta.footer.template.replace("{date}", date-str), mode: "markup")
   }
   let show-on-first = meta.footer.at("show_on_first_page", default: false)
+  // Per-variant override: `--input footer_first_page=true|false` beats meta.
+  let show-on-first = if "footer_first_page" in sys.inputs {
+    sys.inputs.footer_first_page == "true"
+  } else { show-on-first }
 
   set page(
     paper: "us-letter",
