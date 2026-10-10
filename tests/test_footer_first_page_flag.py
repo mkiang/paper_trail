@@ -24,8 +24,8 @@ from pdf_text_extract import extract_words
 
 ROOT = Path(__file__).resolve().parent.parent
 
-_HAS_TYPST = shutil.which("typst") is not None
-typst_required = pytest.mark.skipif(not _HAS_TYPST, reason="typst not on PATH")
+_HAS_TOOLS = shutil.which("typst") is not None and shutil.which("pdftotext") is not None
+typst_required = pytest.mark.skipif(not _HAS_TOOLS, reason="needs typst + pdftotext on PATH")
 
 
 def test_footer_first_page_is_a_default_false_boolean_input():
