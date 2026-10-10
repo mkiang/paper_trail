@@ -15,6 +15,9 @@ A variant can now print the dated footer on page 1.
   overrides it for that variant only; absent, the global setting applies. The
   `modern` template honours it, and the Style editor gets a checkbox that sets
   and persists it (`BOOLEAN_INPUTS`, a variant chip, and the form hint).
+  The checkbox can only force the footer ON: unchecked it elides the key, so
+  forcing it off for one variant is a hand edit of `meta.yml` or a CLI
+  `--input footer_first_page=false`.
 
   A consumer whose template is flattened into a single file (no `--input` at
   compile time) has to bake the override into the flattened `meta`; reading
