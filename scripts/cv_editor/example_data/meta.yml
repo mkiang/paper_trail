@@ -58,6 +58,8 @@
 #                           https://typst.app/docs/reference/foundations/datetime/#format).
 #       show_on_first_page: bool. Optional, default false. When true the
 #                           footer renders on every page including page 1.
+#                           A build variant overrides it with
+#                           `--input footer_first_page=true|false`.
 #   - self_bold: string OR list of strings. Optional. The renderer's mk()
 #                helper substitutes every occurrence of each term with
 #                `*term*` (Typst strong markup) before evaluating, so the
@@ -108,7 +110,7 @@
 #                                show_contributions, show_notes,
 #                                show_media, show_media_urls,
 #                                show_hidden_media, show_highlighted,
-#                                show_future
+#                                show_future, footer_first_page
 #                              show_dollars + show_media_urls default
 #                              to true; everything else defaults false.
 #                              show_future=true reveals future-dated
