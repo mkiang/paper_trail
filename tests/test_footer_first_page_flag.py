@@ -45,6 +45,31 @@ def test_form_round_trip_persists_true_and_elides_false():
     assert build_variants.variant_to_form(variant)["footer_first_page"] is True
 
 
+def test_explicit_false_survives_a_style_save():
+    """The checkbox can only say true, but `false` is a legitimate hand-written
+    value (force the footer off for one variant). A save must not erase it."""
+    from ruamel.yaml.comments import CommentedMap
+
+    existing = CommentedMap(
+        {"filename": "x", "inputs": CommentedMap({"audience": "full", "footer_first_page": False})}
+    )
+    form = build_variants.variant_to_form(existing)
+    form["filename"] = "x"
+    saved = build_variants.form_to_variant(form, existing=existing)
+    assert saved["inputs"]["footer_first_page"] is False
+
+    form["footer_first_page"] = True
+    assert (
+        build_variants.form_to_variant(form, existing=existing)["inputs"]["footer_first_page"]
+        is True
+    )
+
+
+def test_explicit_false_gets_an_off_chip():
+    chips = build_variants.variant_chips({"inputs": {"footer_first_page": False}})
+    assert {"label": "footer_first_page: off", "kind": "off"} in chips
+
+
 def test_variant_chip_names_the_flag():
     chips = build_variants.variant_chips({"inputs": {"footer_first_page": True}})
     assert {"label": "footer first page", "kind": "on"} in chips
@@ -58,36 +83,59 @@ def test_style_edit_page_renders_the_checkbox():
     assert "overrides that setting for this variant only" in body
 
 
-def _page0_word_count(inputs: dict) -> int:
+def _page0_word_count(inputs: dict, *, meta_on_first_page: bool) -> int:
+    """Compile the modern template from a throwaway copy of the tree whose
+    meta.yml sets footer.show_on_first_page, so BOTH override directions are
+    exercised against a known global setting."""
     with tempfile.TemporaryDirectory() as td:
+        tree = Path(td) / "tree"
+        tree.mkdir()
+        for name in ("cv.typ", "data", "src", "templates"):
+            src = ROOT / name
+            if src.is_dir():
+                shutil.copytree(src, tree / name)
+            else:
+                shutil.copy(src, tree / name)
+        meta = tree / "data" / "meta.yml"
+        text = meta.read_text()
+        assert "show_on_first_page:" in text
+        lines = [
+            (
+                f"  show_on_first_page: {'true' if meta_on_first_page else 'false'}"
+                if ln.strip().startswith("show_on_first_page:")
+                else ln
+            )
+            for ln in text.splitlines()
+        ]
+        meta.write_text("\n".join(lines) + "\n")
         out = Path(td) / "o.pdf"
         argv = [
             "typst",
             "compile",
             "--root",
-            str(ROOT),
-            "--font-path",
-            "fonts",
+            str(tree),
             "--ignore-system-fonts",
             "--input",
             "template=modern",
         ]
         for k, v in inputs.items():
             argv += ["--input", f"{k}={v}"]
-        argv += [str(ROOT / "cv.typ"), str(out)]
-        proc = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
+        argv += [str(tree / "cv.typ"), str(out)]
+        proc = subprocess.run(argv, cwd=tree, capture_output=True, text=True)
         assert proc.returncode == 0, proc.stderr
         return len(extract_words(out)[0].words)
 
 
 @typst_required
 def test_modern_template_honours_the_override_in_both_directions():
-    """True adds the footer to page 1; false removes it even when meta turns it
-    on; absent leaves the global setting alone. Word counts, not text, so the
-    assertion cannot be satisfied by page furniture."""
-    absent = _page0_word_count({})
-    forced_on = _page0_word_count({"footer_first_page": "true"})
-    forced_off = _page0_word_count({"footer_first_page": "false"})
-    assert forced_on > forced_off, "footer_first_page=true added nothing to page 1"
-    assert forced_off <= absent <= forced_on
-    assert absent in (forced_on, forced_off), "absent matched neither override: not 'defer to meta'"
+    """With meta OFF, true must add the footer to page 1; with meta ON, false
+    must remove it; absent must follow meta either way. Word counts, not text,
+    so the assertions cannot be satisfied by page furniture."""
+    off_absent = _page0_word_count({}, meta_on_first_page=False)
+    off_true = _page0_word_count({"footer_first_page": "true"}, meta_on_first_page=False)
+    on_absent = _page0_word_count({}, meta_on_first_page=True)
+    on_false = _page0_word_count({"footer_first_page": "false"}, meta_on_first_page=True)
+    assert off_true > off_absent, "footer_first_page=true added nothing to page 1"
+    assert on_false < on_absent, "footer_first_page=false did not remove the footer"
+    assert on_absent == off_true, "absent did not defer to a meta that turns the footer on"
+    assert on_false == off_absent, "forced-off page differs from a meta-off page"

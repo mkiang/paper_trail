@@ -249,6 +249,15 @@ def form_to_variant(
     for key in BOOLEAN_INPUTS:
         if form.get(key):
             inputs[key] = True
+    # footer_first_page is three-state (true / false / absent: defer to meta).
+    # The checkbox can only say true, so an explicit hand-written false is
+    # carried over rather than erased by the save.
+    if (
+        not form.get("footer_first_page")
+        and existing_inputs is not None
+        and existing_inputs.get("footer_first_page") is False
+    ):
+        inputs["footer_first_page"] = False
     # Default-true flags: persist ONLY when explicitly unchecked. Keeping
     # the common case absent avoids littering meta.yml with redundant
     # `show_dollars: true` / `show_media_urls: true` keys.
@@ -320,6 +329,8 @@ def variant_chips(variant) -> list[dict]:
     for key in DEFAULT_TRUE_INPUTS:
         if inputs.get(key) is False:
             chips.append({"label": f"{key}: off", "kind": "off"})
+    if inputs.get("footer_first_page") is False:
+        chips.append({"label": "footer_first_page: off", "kind": "off"})
     if not chips:
         chips.append({"label": "default (no flags set)", "kind": "default"})
     return chips
